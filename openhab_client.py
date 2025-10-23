@@ -6,6 +6,7 @@ from typing import Dict, List, Optional, Any, Set
 from pydantic import create_model
 import json
 from pydantic import Field
+from urllib.parse import quote
 
 # Update imports
 from models import (
@@ -235,7 +236,7 @@ class OpenHABClient:
 
     def update_item(self, item: ItemBase) -> Dict[str, Any]:
         """
-        Update an existing item by merging changes with its current state
+        Update an existing item with partial updates (only changed fields)
 
         Args:
             item: The item containing updates to apply
@@ -246,35 +247,32 @@ class OpenHABClient:
         Raises:
             ValueError: If the item with the given name does not exist or update fails
         """
-        # Get current item state as a dictionary
-        payload = self.get_item(item.name)
-        
         # Convert the update item to a dictionary, excluding unset fields
-        update_data = item.model_dump(exclude_unset=True, by_alias=True)
+        # This sends only the fields that should be updated
+        payload = item.model_dump(exclude_unset=True, by_alias=True)
         
-        # Handle semantic and non-semantic tags from the update
-        if 'semanticTags' in update_data or 'nonSemanticTags' in update_data:
-            tags = []
-            if 'semanticTags' in update_data:
-                all_tags = self.list_semantic_tags()
-                for tag in all_tags:
-                    if tag["uid"] in update_data["semanticTags"]:
-                        tags.append(tag["name"])
-            if 'nonSemanticTags' in update_data:
-                tags.extend(update_data['nonSemanticTags'])
+        # Handle semantic and non-semantic tags specifically
+        tags = []
+        if hasattr(item, 'semanticTags') and item.semanticTags:
+            all_tags = self.list_semantic_tags()
+            for tag in all_tags:
+                if tag["uid"] in item.semanticTags:
+                    tags.append(tag["name"])
+        if hasattr(item, 'nonSemanticTags') and item.nonSemanticTags:
+            tags.extend(item.nonSemanticTags)
+        
+        if tags:
             payload['tags'] = tags
             
-            # Remove the original fields as they're not part of the API
-            update_data.pop('semanticTags', None)
-            update_data.pop('nonSemanticTags', None)
-
-        # Update payload with values from update_data
-        payload.update(update_data)
+        # Remove the original fields as they're not part of the API
+        payload.pop('semanticTags', None)
+        payload.pop('nonSemanticTags', None)
         
         # Send the update
         response = self.session.put(
             f"{self.base_url}/rest/items/{item.name}",
-            json=payload
+            json=payload,
+            headers={"Content-Type": "application/json"}
         )
         
         if response.status_code == 400:
@@ -812,9 +810,19 @@ class OpenHABClient:
             thing_uid: UID of the thing to retrieve
 
         Returns:
-            Thing object containing the thing details
+            Dict[str, Any]: The thing details
+            
+        Raises:
+            ValueError: If the thing UID is not found
+            Exception: For other HTTP errors
         """
-        response = self.session.get(f"{self.base_url}/rest/things/{thing_uid}")
+        if not thing_uid:
+            raise ValueError("Thing UID must be provided")
+            
+        response = self.session.get(
+            f"{self.base_url}/rest/things/{quote(thing_uid, safe='')}"
+        )
+        
         if response.status_code == 404:
             raise ValueError(f"Thing with UID '{thing_uid}' not found")
 
@@ -846,7 +854,7 @@ class OpenHABClient:
 
     def update_thing(self, thing: ThingBase) -> Dict[str, Any]:
         """
-        Update an existing thing by merging changes with its current state
+        Update an existing thing with partial updates (only changed fields)
 
         Args:
             thing: The thing containing updates to apply
@@ -857,42 +865,58 @@ class OpenHABClient:
         Raises:
             ValueError: If the thing with the given UID does not exist or update fails
         """
-        # Get current thing state as a dictionary
-        payload = self.get_thing(thing.UID)
-        
         # Convert the update thing to a dictionary, excluding unset fields
-        update_data = thing.model_dump(exclude_unset=True, by_alias=True)
+        # This sends only the fields that should be updated
+        payload = thing.model_dump(exclude_unset=True, by_alias=True)
         
-        # Update payload with values from update_data
-        payload.update(update_data)
+        # Remove UID from payload as it's in the URL
+        payload.pop('UID', None)
         
+        print(f"{self.base_url}/rest/things/{quote(thing.UID, safe='')}", payload)
+
         # Send the update
         response = self.session.put(
-            f"{self.base_url}/rest/things/{thing.UID}",
-            json=payload
+            f"{self.base_url}/rest/things/{quote(thing.UID, safe='')}",
+            json=payload,
+            headers={"Content-Type": "application/json"}
         )
         
         if response.status_code == 404:
             raise ValueError(f"Thing with UID '{thing.UID}' not found")
         if response.status_code == 409:
             raise ValueError(f"Thing with UID '{thing.UID}' not editable")
-        response.raise_for_status()
+        if response.status_code >= 400:
+            raise ValueError(f"Thing update failed {response.status_code}: {response.text}")
 
         # Return the updated thing
         return self.get_thing(thing.UID)
 
     def delete_thing(self, thing_uid: str) -> bool:
-        """Delete a thing"""
-        response = self.session.delete(f"{self.base_url}/rest/things/{thing_uid}")
+        """
+        Delete a thing
+        
+        Args:
+            thing_uid: UID of the thing to delete
+            
+        Returns:
+            bool: True if the thing was deleted successfully
+            
+        Raises:
+            KeyError: If the thing with the given UID is not found
+            Exception: For other HTTP errors
+        """
+        response = self.session.delete(
+            f"{self.base_url}/rest/things/{quote(thing_uid, safe='')}"
+        )
 
         if response.status_code == 404:
             raise KeyError(f"Thing with UID '{thing_uid}' not found")
-
+            
         response.raise_for_status()
         return True
 
     # Thing Channels
-    def get_thing_channels(self, thing_uid: str, linked_only: bool = False) -> Optional[List[Dict[str, Any]]]:
+    def get_thing_channels(self, thing_uid: str, linked_only: bool = False) -> List[Dict[str, Any]]:
         """Get the channels of a specific thing by UID
         
         Args:
@@ -901,17 +925,25 @@ class OpenHABClient:
                         If False, return all channels (default)
                         
         Returns:
-            List of channel dictionaries, or None if thing not found
+            List[Dict[str, Any]]: List of channel dictionaries
+            
+        Raises:
+            ValueError: If the thing UID is not provided or the thing is not found
+            Exception: For other HTTP errors
         """
         if not thing_uid:
             raise ValueError("Thing UID must be provided")
 
-        response = self.session.get(f"{self.base_url}/rest/things/{thing_uid}")
+        response = self.session.get(
+            f"{self.base_url}/rest/things/{quote(thing_uid, safe='')}"
+        )
+        
         if response.status_code == 404:
             raise ValueError(f"Thing with UID '{thing_uid}' not found")
-
+            
         response.raise_for_status()
-        channels = response.json().get("channels", [])        
+        channels = response.json().get("channels", [])
+        
         if linked_only:
             return [channel for channel in channels if channel.get("linkedItems")]
         return channels

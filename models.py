@@ -97,6 +97,7 @@ class ThingBase(BaseModel):
     UID: Optional[str] = Field(None, description="UID of the thing")
     thingTypeUID: Optional[str] = Field(None, description="Type of the thing")
     label: Optional[str] = Field(None, description="Label of the thing")
+    location: Optional[str] = Field(None, description="Location of the thing")
     bridgeUID: Optional[str] = Field(None, description="UID of the bridge")
     configuration: Dict[str, Any] = Field(default_factory=dict, description="Configuration of the thing")
     properties: Dict[str, str] = Field(default_factory=dict, description="Properties of the thing")

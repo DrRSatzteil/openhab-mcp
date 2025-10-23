@@ -502,7 +502,7 @@ def list_things(
     sort_order: str = Field("asc", description="Sort order", examples=["asc", "desc"]),
 ) -> Dict[str, Any]:
     """
-    List openHAB things with basic information with pagination. Use the `get_thing_details` tool to get
+    List openHAB things with basic information with pagination. Use the `get_thing` tool to get
     more information about a specific thing.
 
     Args:
