@@ -55,7 +55,7 @@ OPENHAB_PASSWORD = os.environ.get("OPENHAB_PASSWORD")
 OPENHAB_MCP_TRANSPORT = os.environ.get("OPENHAB_MCP_TRANSPORT", "stdio")
 
 if OPENHAB_MCP_TRANSPORT == "streamable-http":
-    mcp = FastMCP("OpenHAB MCP Server", stateless_http=True)
+    mcp = FastMCP("OpenHAB MCP Server", stateless_http=True, host="0.0.0.0", port=8000)
 else:
     mcp = FastMCP("OpenHAB MCP Server")
 
