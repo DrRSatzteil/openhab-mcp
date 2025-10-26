@@ -34,7 +34,7 @@ from openhab_mcp.models import (
     RuleCreate,
     RuleUpdate,
 )
-from openhab_client import OpenHABClient
+from openhab_mcp.openhab_client import OpenHABClient
 
 # Load environment variables from .env file
 env_file = Path(".env")

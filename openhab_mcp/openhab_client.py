@@ -9,7 +9,7 @@ from pydantic import Field
 from urllib.parse import quote
 
 # Update imports
-from models import (
+from openhab_mcp.models import (
     ItemBase,
     ItemCreate,
     ItemMetadata,
