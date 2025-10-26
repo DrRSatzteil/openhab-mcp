@@ -48,14 +48,35 @@ MCP_PORT = int(os.environ.get("MCP_PORT", "8000"))
 LOG_LEVEL = os.environ.get("LOG_LEVEL", "INFO").upper()
 
 # Configure logging
-logging.basicConfig(level=LOG_LEVEL)
+logging.basicConfig(
+    level=LOG_LEVEL,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
+
+# Log environment variables (excluding sensitive data)
+logger.info("MCP Server Configuration:")
+logger.info(f"  MCP_HOST: {MCP_HOST}")
+logger.info(f"  MCP_PORT: {MCP_PORT}")
+logger.info(f"  LOG_LEVEL: {LOG_LEVEL}")
+logger.info(f"  PYTHONPATH: {os.environ.get('PYTHONPATH', 'Not set')}")
 
 # Get OpenHAB connection settings from environment variables
 OPENHAB_URL = os.environ.get("OPENHAB_URL", "http://localhost:8080")
+OPENHAB_MCP_TRANSPORT = os.environ.get("OPENHAB_MCP_TRANSPORT", "stdio")
+
+# Log OpenHAB settings (excluding sensitive data)
+logger.info("OpenHAB Configuration:")
+logger.info(f"  OPENHAB_URL: {OPENHAB_URL}")
+logger.info(f"  OPENHAB_MCP_TRANSPORT: {OPENHAB_MCP_TRANSPORT}")
+logger.info("  OPENHAB_API_TOKEN: Set" if os.environ.get("OPENHAB_API_TOKEN") else "  OPENHAB_API_TOKEN: Not set")
+logger.info("  OPENHAB_USERNAME: Set" if os.environ.get("OPENHAB_USERNAME") else "  OPENHAB_USERNAME: Not set")
+logger.info("  OPENHAB_PASSWORD: Set" if os.environ.get("OPENHAB_PASSWORD") else "  OPENHAB_PASSWORD: Not set")
+
+# Get sensitive variables (not logged)
 OPENHAB_API_TOKEN = os.environ.get("OPENHAB_API_TOKEN")
 OPENHAB_USERNAME = os.environ.get("OPENHAB_USERNAME")
 OPENHAB_PASSWORD = os.environ.get("OPENHAB_PASSWORD")
-OPENHAB_MCP_TRANSPORT = os.environ.get("OPENHAB_MCP_TRANSPORT", "stdio")
 
 # Initialize the real OpenHAB client
 openhab_client = OpenHABClient(
