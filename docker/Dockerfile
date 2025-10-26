@@ -27,5 +27,6 @@ ENV MCP_HOST=0.0.0.0 \
     OPENHAB_PASSWORD="" \
     PYTHONPATH=/app:$PYTHONPATH
 
-# Run the MCP server using the installed package
-CMD ["python", "-m", "openhab_mcp"]
+# Run the MCP server in the background and keep the container alive
+CMD python -m openhab_mcp & \
+    tail -f /dev/null
