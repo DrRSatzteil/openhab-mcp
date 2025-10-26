@@ -14,9 +14,6 @@ from pathlib import Path
 from dotenv import load_dotenv
 from pydantic import Field
 
-# Configure logging to suppress INFO messages
-logging.basicConfig(level=logging.INFO)
-
 # Import the MCP server implementation
 from mcp.server import FastMCP
 from mcp.types import TextContent
@@ -39,13 +36,19 @@ from models import (
 )
 from openhab_client import OpenHABClient
 
-mcp = FastMCP(name="OpenHAB MCP Server")
-
 # Load environment variables from .env file
 env_file = Path(".env")
 if env_file.exists():
     print(f"Loading environment variables from {env_file}", file=sys.stderr)
     load_dotenv(env_file, verbose=True)
+
+# Get MCP server settings from environment variables
+MCP_HOST = os.environ.get("MCP_HOST", "0.0.0.0")
+MCP_PORT = int(os.environ.get("MCP_PORT", "8000"))
+LOG_LEVEL = os.environ.get("LOG_LEVEL", "INFO").upper()
+
+# Configure logging
+logging.basicConfig(level=LOG_LEVEL)
 
 # Get OpenHAB connection settings from environment variables
 OPENHAB_URL = os.environ.get("OPENHAB_URL", "http://localhost:8080")
@@ -54,10 +57,23 @@ OPENHAB_USERNAME = os.environ.get("OPENHAB_USERNAME")
 OPENHAB_PASSWORD = os.environ.get("OPENHAB_PASSWORD")
 OPENHAB_MCP_TRANSPORT = os.environ.get("OPENHAB_MCP_TRANSPORT", "stdio")
 
-if OPENHAB_MCP_TRANSPORT == "streamable-http":
-    mcp = FastMCP("OpenHAB MCP Server", stateless_http=True, host="0.0.0.0", port=8000)
-else:
-    mcp = FastMCP("OpenHAB MCP Server")
+# Initialize the real OpenHAB client
+openhab_client = OpenHABClient(
+    base_url=OPENHAB_URL,
+    api_token=OPENHAB_API_TOKEN,
+    username=OPENHAB_USERNAME,
+    password=OPENHAB_PASSWORD,
+)
+
+# Initialize MCP after environment is loaded
+mcp = FastMCP(
+    "OpenHAB MCP Server",
+    stateless_http=True,
+    host=MCP_HOST,
+    port=MCP_PORT,
+    log_level=LOG_LEVEL
+)
+logging.info(f"Starting MCP server on {MCP_HOST}:{MCP_PORT} with CORS enabled")
 
 if not OPENHAB_API_TOKEN and not (OPENHAB_USERNAME and OPENHAB_PASSWORD):
     print(
@@ -68,14 +84,6 @@ if not OPENHAB_API_TOKEN and not (OPENHAB_USERNAME and OPENHAB_PASSWORD):
         "Set OPENHAB_API_TOKEN or OPENHAB_USERNAME/OPENHAB_PASSWORD in .env file.",
         file=sys.stderr,
     )
-
-# Initialize the real OpenHAB client
-openhab_client = OpenHABClient(
-    base_url=OPENHAB_URL,
-    api_token=OPENHAB_API_TOKEN,
-    username=OPENHAB_USERNAME,
-    password=OPENHAB_PASSWORD,
-)
 
 
 # Item Tools

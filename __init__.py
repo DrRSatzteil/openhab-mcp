@@ -1,5 +1,8 @@
 """
-OpenHAB MCP Server package.
+OpenHAB MCP - Management and Control Platform.
 
-This package provides an MCP server that interacts with a real openHAB instance.
+This package provides tools for managing and controlling OpenHAB instances.
 """
+
+# Make the main package available at the root level
+from openhab_mcp import *  # noqa

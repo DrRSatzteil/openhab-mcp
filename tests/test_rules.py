@@ -1,17 +1,31 @@
+import os
 import unittest
-import time
-from typing import Dict, Any, List
-from openhab_client import OpenHABClient
-from models import RuleCreate, RuleUpdate, RuleAction, RuleTrigger, RuleCondition
+from typing import Dict, Any
+from dotenv import load_dotenv
+from openhab_mcp.openhab_client import OpenHABClient
+from openhab_mcp.models import RuleCreate, RuleUpdate
+
+# Load test environment variables
+load_dotenv('.env.test')
 
 class TestOpenHABRules(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         """Initialize the OpenHAB client before running tests"""
-        cls.client = OpenHABClient(
-            base_url="https://openhab.amfthome.org",  # Update with your OpenHAB URL
-            api_token="oh.admintoken.CJpWSex2w3OSDOCUyPYy5qt9YbqoJkB4G4AggnAub1TUiIKEWyV2MsRoJGmE3DRlvzJojwp9pyKQ622Yig"  # Update with your API token or use username/password
-        )
+        base_url = os.getenv('OPENHAB_URL')
+        api_token = os.getenv('OPENHAB_API_TOKEN')
+        username = os.getenv('OPENHAB_USERNAME')
+        password = os.getenv('OPENHAB_PASSWORD')
+        
+        if not base_url:
+            raise ValueError("OPENHAB_URL environment variable is not set")
+            
+        if api_token:
+            cls.client = OpenHABClient(base_url=base_url, api_token=api_token)
+        elif username and password:
+            cls.client = OpenHABClient(base_url=base_url, username=username, password=password)
+        else:
+            raise ValueError("Either OPENHAB_API_TOKEN or both OPENHAB_USERNAME and OPENHAB_PASSWORD must be set")
         # Prefix for test rules to easily identify and clean them up
         cls.test_prefix = "TestRule_"
         

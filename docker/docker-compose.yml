@@ -2,19 +2,24 @@ version: '3.8'
 
 services:
   openhab-mcp:
-    build: .
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
     container_name: openhab-mcp
     restart: unless-stopped
     ports:
-      - "8080:8080"
+      - "8081:8000"
     environment:
+      - MCP_HOST=${MCP_HOST:-0.0.0.0}
+      - MCP_PORT=${MCP_PORT:-8000}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
       - OPENHAB_URL=${OPENHAB_URL:-http://openhab:8080}
       - OPENHAB_API_TOKEN=${OPENHAB_API_TOKEN:-}
       - OPENHAB_USERNAME=${OPENHAB_USERNAME:-}
       - OPENHAB_PASSWORD=${OPENHAB_PASSWORD:-}
-      - LOG_LEVEL=INFO
+      - PYTHONUNBUFFERED=1
     volumes:
-      - ./process_template_override:/app/process_templates/override
+      - ../openhab_mcp/process_templates/override:/app/openhab_mcp/process_templates/override
     networks:
       - openhab-network
 

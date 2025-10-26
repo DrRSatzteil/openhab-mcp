@@ -14,11 +14,18 @@ lib/
 lib64/
 parts/
 sdist/
+test/
 var/
 wheels/
 *.egg-info/
 .installed.cfg
 *.egg
+
+# Test environment variables
+.env.test
+
+# Test artifacts
+.pytest_cache/
 
 # Virtual Environment
 .env
@@ -38,5 +45,3 @@ ENV/
 Thumbs.db
 
 config.json
-
-docker/

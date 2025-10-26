@@ -1,85 +1,138 @@
 # OpenHAB MCP Server
 
-A MCP (Model Context Protocol) server that interacts with a real openHAB instance.
+A Model Context Protocol (MCP) server that provides AI assistants with comprehensive access to an openHAB smart home system.
 
 ## Overview
 
-This project provides an implementation of an MCP server that connects to a real openHAB instance via its REST API. It enables AI assistants like Claude and Cline to interact with your openHAB smart home system.
+This project implements an MCP server that connects to an openHAB instance via its REST API, enabling AI assistants to interact with and manage your smart home system using natural language.
 
-The server provides comprehensive access to openHAB's core components:
+### Key Features
 
-### Items
-- List, get, create, update, and delete items
-- Update item states
+#### Items Management
+- List, view, create, update, and delete items
+- Get and update item states
+- Manage item metadata and tags
+- Handle item persistence data
+- Support for group items and members
 
-### Things
-- List all things
-- Get specific things by UID
+#### Things Management
+- List all things with pagination
+- View detailed information about specific things
+- Manage thing channels and links
+- Handle inbox items (approve, ignore, delete)
 
-### Rules
-- List, get, create, update, and delete rules
+#### Rules & Scripts
+- Full CRUD operations for rules
 - Update rule script actions
 - Run rules on demand
+- Enable/disable rules
+- Script management (specialized rules with no triggers)
 
-### Scripts
-- List, get, create, update, and delete scripts
-
-When connected to Claude or Cline in VSCode, you can use natural language to control and manage your openHAB system, making home automation more accessible and intuitive.
+#### Semantic Model
+- Manage semantic tags and categories
+- Assign semantic and non-semantic tags to items
+- Hierarchical tag structure support
 
 ## Requirements
 
-- Python 3.7+
+- Python 3.9+
+- Docker (for containerized deployment)
+- OpenHAB 3.4+ instance
 
-## Installation and Usage
+## Quick Start with Docker Compose
 
-The recommended way to run the OpenHAB MCP Server is using Docker:
+The easiest way to get started is using the provided Docker Compose configuration:
 
-To run the MCP using Docker, follow these steps:
-
-1. Build the Docker image:
+1. Clone the repository:
    ```bash
-   make docker-build
-   # or directly: docker build -t openhab-mcp .
+   git clone https://github.com/yourusername/openhab-mcp.git
+   cd openhab-mcp
    ```
 
-2. Run the Docker container:
+2. Copy the example environment file and update it with your configuration:
    ```bash
-   make docker-run
-   # or directly:
-   docker run -d --rm -p 8081:8080 \
-     -e OPENHAB_URL=http://your-openhab-host:8080 \
-     -e OPENHAB_API_TOKEN=your-api-token \
-     --name openhab-mcp \
-     openhab-mcp
+   cp .env.example .env
+   # Edit .env with your settings
    ```
 
-3. To stop the container:
+3. Start the service:
    ```bash
-   make docker-stop
-   # or directly: docker stop openhab-mcp
+   docker-compose -f docker/docker-compose.yml up -d
    ```
 
-Note: The container exposes port 8080 internally, but we map it to port 8081 on the host to avoid conflicts with OpenHAB which typically uses port 8080.
+## Manual Installation
 
-## Using with Claude and Cline in VSCode
+### Prerequisites
+- Python 3.9+
+- pip
+- virtualenv (recommended)
 
-You can connect this OpenHAB MCP server to Claude or Cline in VSCode to interact with your OpenHAB instance through AI assistants.
+### Installation Steps
+
+1. Create and activate a virtual environment:
+   ```bash
+   python -m venv venv
+   source venv/bin/activate  # On Windows: venv\Scripts\activate
+   ```
+
+2. Install dependencies:
+   ```bash
+   pip install -r requirements.txt
+   pip install -e .
+   ```
+
+3. Configure environment variables (see Configuration section below)
+
+4. Run the server:
+   ```bash
+   python -m openhab_mcp.openhab_mcp_server
+   ```
+
+## Configuration
+
+The server can be configured using environment variables or a `.env` file in the project root.
+
+### Required Variables
+- `OPENHAB_URL`: URL of your openHAB instance (e.g., `http://openhab:8080`)
+
+### Authentication (choose one method)
+- `OPENHAB_API_TOKEN`: API token for authentication (recommended)
+- `OPENHAB_USERNAME` and `OPENHAB_PASSWORD`: Basic auth credentials
+
+### Server Configuration
+- `MCP_HOST`: Host to bind the server to (default: `0.0.0.0`)
+- `MCP_PORT`: Port to run the server on (default: `8000`)
+- `LOG_LEVEL`: Logging level (default: `INFO`)
+- `OPENHAB_MCP_TRANSPORT`: Transport mode (`stdio`, `streamable-http`, or `sse`) (default: `stdio`)
+
+## Integration with AI Assistants
+
+The OpenHAB MCP Server can be used with various AI assistants that support the MCP protocol, including Claude and Cline.
 
 ### Prerequisites
 
-- For Claude: [Claude Desktop app](https://claude.ai/desktop) installed
-- For Cline: [Cline VSCode extension](https://marketplace.visualstudio.com/items?itemName=Anthropic.cline) installed
+- For Claude: [Claude Desktop app](https://claude.ai/desktop) or compatible client
+- For Cline: [Cline VSCode extension](https://marketplace.visualstudio.com/items?itemName=Anthropic.cline)
 
-### Configuration for Claude Desktop
+### Configuration
 
-1. Build and run the Docker container as described in the "Running the MCP with Docker" section.
-2. Create a configuration file for Claude Desktop:
+#### Docker Compose (Recommended)
 
-Save the following as `claude_desktop_config.json` in your Claude Desktop configuration directory:
+1. Update the `docker-compose.yml` with your configuration
+2. Start the service:
+   ```bash
+   docker-compose -f docker/docker-compose.yml up -d
+   ```
 
-- macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`
-- Windows: `%APPDATA%\Claude\claude_desktop_config.json`
-- Linux: `~/.config/Claude/claude_desktop_config.json`
+#### Manual Configuration
+
+For manual configuration with Claude Desktop, create a configuration file at:
+
+- **macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
+- **Windows**: `%APPDATA%\Claude\claude_desktop_config.json`
+- **Linux**: `~/.config/Claude/claude_desktop_config.json`
+
+Example configuration:
 
 ```json
 {
@@ -89,19 +142,18 @@ Save the following as `claude_desktop_config.json` in your Claude Desktop config
       "command": "docker",
       "args": [
         "run",
-        "-d",
-        "-p",
-        "8081:8080",
-        "-e",
-        "OPENHAB_URL=http://your-openhab-host:8080",
-        "-e",
-        "OPENHAB_API_TOKEN=your-api-token",
-        "--name",
-        "openhab-mcp",
+        "--rm",
+        "-p", "8000:8000",
+        "-e", "OPENHAB_URL=http://openhab:8080",
+        "-e", "OPENHAB_API_TOKEN=your-api-token",
+        "-e", "MCP_HOST=0.0.0.0",
+        "-e", "MCP_PORT=8000",
+        "-e", "LOG_LEVEL=INFO",
         "openhab-mcp"
       ]
     }
   ]
+}
 }
 ```
 
@@ -152,71 +204,99 @@ Can you list all the items in my OpenHAB system?
 
 If configured correctly, Claude/Cline will use the MCP server to fetch and display your OpenHAB items.
 
-## MCP Tools
+## Available Tools
 
-The server provides the following tools:
+The MCP server provides a comprehensive set of tools for managing your openHAB system. Here's a categorized list of available tools:
 
-### Item Management
-1. `list_items` - List all openHAB items, optionally filtered by tag
-2. `get_item` - Get a specific openHAB item by name
-3. `create_item` - Create a new openHAB item
-4. `update_item` - Update an existing openHAB item
-5. `delete_item` - Delete an openHAB item
-6. `update_item_state` - Update just the state of an openHAB item
+### Items Management
+- `list_items` - List items with pagination and filtering
+- `get_item` - Get detailed information about a specific item
+- `create_item` - Create a new item
+- `update_item` - Update an existing item
+- `delete_item` - Remove an item
+- `get_item_state` - Get current state of an item
+- `update_item_state` - Update item state
+- `send_command` - Send a command to an item
+- `get_item_persistence` - Retrieve historical state data
+- `update_item_members` - Update group item members in bulk
 
-### Thing Management
-7. `list_things` - List all openHAB things
-8. `get_thing` - Get a specific openHAB thing by UID
+### Item Metadata & Tags
+- `get_item_metadata_namespaces` - List metadata namespaces
+- `get_item_metadata` - Get metadata for an item
+- `add_or_update_item_metadata` - Manage item metadata
+- `remove_item_metadata` - Remove metadata
+- `list_semantic_tags` - Browse semantic tags
+- `get_semantic_tag` - Get tag details
+- `create_semantic_tag` - Create new semantic tags
+- `delete_semantic_tag` - Remove semantic tags
+- `add_item_semantic_tag` - Tag items semantically
+- `remove_item_semantic_tag` - Remove semantic tags
+- `add_item_non_semantic_tag` - Add regular tags
+- `remove_item_non_semantic_tag` - Remove regular tags
 
-### Rule Management
-9. `list_rules` - List all openHAB rules, optionally filtered by tag
-10. `get_rule` - Get a specific openHAB rule by UID
-11. `create_rule` - Create a new openHAB rule
-12. `update_rule` - Update an existing openHAB rule with partial updates
-13. `update_rule_script_action` - Update a script action in an openHAB rule
-14. `delete_rule` - Delete an openHAB rule
-15. `run_rule_now` - Run an openHAB rule immediately
+### Things & Links
+- `list_things` - Browse things with pagination
+- `get_thing` - Get thing details
+- `create_thing` - Add new things
+- `update_thing` - Modify existing things
+- `delete_thing` - Remove things
+- `get_thing_channels` - List thing channels
+- `list_links` - View item-thing links
+- `get_link` - Get link details
+- `create_or_update_link` - Manage links
+- `delete_link` - Remove links
 
-### Script Management
-16. `list_scripts` - List all openHAB scripts (rules with tag 'Script' and no trigger)
-17. `get_script` - Get a specific openHAB script by ID
-18. `create_script` - Create a new openHAB script
-19. `update_script` - Update an existing openHAB script
-20. `delete_script` - Delete an openHAB script
+### Rules & Scripts
+- `list_rules` - Browse rules
+- `get_rule` - Get rule details
+- `create_rule` - Create new rules
+- `update_rule` - Modify rules
+- `delete_rule` - Remove rules
+- `update_rule_script_action` - Update rule scripts
+- `run_rule_now` - Execute rules immediately
+- `set_rule_enabled` - Toggle rule state
+- `list_scripts` - List available scripts
+- `get_script` - Get script details
+- `create_script` - Create new scripts
+- `update_script` - Modify scripts
+- `delete_script` - Remove scripts
 
-## MCP Resources
+### Inbox & Discovery
+- `list_inbox_things` - View discovered devices
+- `approve_inbox_thing` - Approve new devices
+- `ignore_inbox_thing` - Ignore devices
+- `unignore_inbox_thing` - Reconsider ignored devices
+- `delete_inbox_thing` - Remove from inbox
 
-The server provides the following resources:
-
-1. `openhab://items` - List of all items in the openHAB system
-2. `openhab://items/{item_name}` - Get a specific item by name
-
-## Sample Item Structure
-
-```json
-{
-  "name": "LivingRoom_Light",
-  "type": "Switch",
-  "label": "Living Room Light",
-  "state": "OFF",
-  "tags": ["Lighting", "LivingRoom"],
-  "groups": ["gLights", "gLivingRoom"]
-}
-```
+### Task Automation
+- `list_task_templates` - Find automation templates
+- `get_task_template` - Get template details
+- `save_task_template_override` - Customize templates
+- `delete_task_template_override` - Remove custom templates
+- `get_task_template_schema` - View template structure
 
 ## Development
 
-For development purposes, please refer to the DEVELOPER.md file for more information on the Docker-based development workflow.
+### Running Tests
 
-## Notes
+```bash
+# Install test dependencies
+pip install -r tests/requirements.txt
 
-This implementation connects to a real openHAB instance via its REST API. For production use, you might want to enhance it with:
+# Run tests
+pytest tests/
+```
 
-1. More comprehensive error handling and logging
-2. Additional authentication and security features
-3. More sophisticated caching mechanisms
-4. Support for more openHAB features (rules, things, etc.)
+### Building the Docker Image
+
+```bash
+docker build -t openhab-mcp .
+```
 
 ## License
 
 MIT
+
+## Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request.
