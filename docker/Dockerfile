@@ -17,6 +17,10 @@ COPY openhab_mcp/ ./openhab_mcp/
 # Install the package in development mode
 RUN pip install -e .
 
+# Debug: Check mcp package structure
+RUN python -c "import mcp; print('mcp path:', mcp.__file__); print('mcp dir:', dir(mcp))"
+RUN find /usr/local/lib/python3.12/site-packages/mcp -type f | sort
+
 # Set environment variables with defaults that can be overridden at runtime
 ENV MCP_HOST=0.0.0.0 \
     MCP_PORT=8000 \
