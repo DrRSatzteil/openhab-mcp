@@ -1251,5 +1251,10 @@ def get_task_template_schema() -> Dict[str, Any]:
 # Add the template manager to the MCP instance
 mcp.template_manager = template_manager
 
-if __name__ == "__main__":
+def run_server():
+    """Run the MCP server with the configured transport."""
     mcp.run(transport=OPENHAB_MCP_TRANSPORT)
+
+if __name__ == "__main__":
+    # This allows running the server directly with: python -m openhab_mcp.openhab_mcp_server
+    run_server()

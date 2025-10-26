@@ -14,8 +14,8 @@ RUN python -m pip install --no-cache-dir --upgrade pip && \
 # Copy the application code (excluding tests)
 COPY openhab_mcp/ ./openhab_mcp/
 
-# Install the package in development mode
-RUN pip install -e .
+# Install the package
+RUN pip install .
 
 # Set environment variables with defaults that can be overridden at runtime
 ENV MCP_HOST=0.0.0.0 \
@@ -27,5 +27,5 @@ ENV MCP_HOST=0.0.0.0 \
     OPENHAB_PASSWORD="" \
     PYTHONPATH=/app:$PYTHONPATH
 
-# Run the MCP server when the container launches
-CMD ["python", "-m", "openhab_mcp.openhab_mcp_server"]
+# Run the MCP server using the installed package
+CMD ["python", "-m", "openhab_mcp"]
