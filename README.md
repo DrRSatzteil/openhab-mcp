@@ -49,10 +49,10 @@ The easiest way to get started is using the provided Docker Compose configuratio
    cd openhab-mcp
    ```
 
-2. Copy the example environment file and update it with your configuration:
+2. Copy the example environment file to the docker directory and update it with your configuration:
    ```bash
-   cp .env.example .env
-   # Edit .env with your settings
+   cp docker/.env.example docker/.env
+   # Edit docker/.env with your settings
    ```
 
 3. Start the service:
@@ -90,7 +90,7 @@ The easiest way to get started is using the provided Docker Compose configuratio
 
 ## Configuration
 
-The server can be configured using environment variables or a `.env` file in the project root.
+The server can be configured using environment variables or a `.env` file in the `docker` directory.
 
 ### Required Variables
 - `OPENHAB_URL`: URL of your openHAB instance (e.g., `http://openhab:8080`)

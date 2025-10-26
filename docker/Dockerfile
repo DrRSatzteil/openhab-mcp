@@ -17,15 +17,8 @@ COPY openhab_mcp/ ./openhab_mcp/
 # Install the package
 RUN pip install .
 
-# Set environment variables with defaults that can be overridden at runtime
-ENV MCP_HOST=0.0.0.0 \
-    MCP_PORT=8000 \
-    LOG_LEVEL=INFO \
-    OPENHAB_URL=http://openhab:8080 \
-    OPENHAB_API_TOKEN="" \
-    OPENHAB_USERNAME="" \
-    OPENHAB_PASSWORD="" \
-    PYTHONPATH=/app:$PYTHONPATH
+# Set Python path
+ENV PYTHONPATH=/app:$PYTHONPATH
 
 # Run the MCP server in the background and keep the container alive
 CMD python -m openhab_mcp & \

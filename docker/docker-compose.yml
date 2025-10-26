@@ -2,8 +2,6 @@ version: '3.8'
 
 services:
   openhab-mcp:
-    env_file:
-      - ../.env
     build:
       context: ..
       dockerfile: docker/Dockerfile
@@ -11,14 +9,10 @@ services:
     restart: unless-stopped
     ports:
       - "8081:8000"
+    # Environment variables are loaded from .env file in the docker directory
+    env_file:
+      - .env
     environment:
-      - MCP_HOST=${MCP_HOST:-0.0.0.0}
-      - MCP_PORT=${MCP_PORT:-8000}
-      - LOG_LEVEL=${LOG_LEVEL:-INFO}
-      - OPENHAB_URL=${OPENHAB_URL:-http://openhab:8080}
-      - OPENHAB_API_TOKEN=${OPENHAB_API_TOKEN:-}
-      - OPENHAB_USERNAME=${OPENHAB_USERNAME:-}
-      - OPENHAB_PASSWORD=${OPENHAB_PASSWORD:-}
       - PYTHONUNBUFFERED=1
     volumes:
       - ../openhab_mcp/process_templates/override:/app/openhab_mcp/process_templates/override
