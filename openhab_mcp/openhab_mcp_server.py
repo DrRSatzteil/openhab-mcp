@@ -23,7 +23,7 @@ from openhab_mcp.template_manager import TemplateManager, ProcessTemplate
 template_manager = TemplateManager()
 
 # Import our modules
-from models import (
+from openhab_mcp.models import (
     ItemCreate,
     ItemUpdate,
     ItemMetadata,
