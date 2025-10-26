@@ -18,7 +18,7 @@ from pydantic import Field
 from mcp.server import FastMCP
 from mcp.types import TextContent
 
-from template_manager import TemplateManager, ProcessTemplate
+from openhab_mcp.template_manager import TemplateManager, ProcessTemplate
 
 template_manager = TemplateManager()
 
