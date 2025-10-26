@@ -4,8 +4,8 @@ FROM python:3.12-slim
 # Set the working directory in the container
 WORKDIR /app
 
-# Copy requirements and setup files first for better caching
-COPY requirements.txt setup.py setup.cfg pyproject.toml ./
+# Copy requirements, setup files and README for better caching
+COPY requirements.txt setup.py setup.cfg pyproject.toml README.md ./
 
 # Install dependencies
 RUN pip install --no-cache-dir -r requirements.txt
@@ -17,6 +17,9 @@ COPY openhab_mcp/ ./openhab_mcp/
 RUN pip install -e .
 
 # Set environment variables with defaults that can be overridden at runtime
+ENV MCP_HOST=0.0.0.0
+ENV MCP_PORT=8000
+ENV LOG_LEVEL=INFO
 ENV OPENHAB_URL=http://openhab:8080
 ENV OPENHAB_API_TOKEN=""
 ENV OPENHAB_USERNAME=""
