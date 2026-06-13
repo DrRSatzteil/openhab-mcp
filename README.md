@@ -274,6 +274,88 @@ The MCP server provides a comprehensive set of tools for managing your openHAB s
 - `delete_task_template_override` - Remove custom templates
 - `get_task_template_schema` - View template structure
 
+## Teleport Integration
+
+The OpenHAB MCP server can be securely exposed via [Teleport](https://goteleport.com/) without requiring a VPN or direct network access from your AI assistant client.
+
+### Architecture
+
+```
+Claude Code / AI Client
+  → tbot application-tunnel (local port)
+  → Teleport Proxy
+  → Teleport App Service
+  → openhab-mcp container (HTTP mode)
+```
+
+> **Important:** Teleport's `application-tunnel` only works with HTTP apps. The container must run in `streamable-http` mode, not `stdio`.
+
+### 1. Container Configuration
+
+Run the container with HTTP transport enabled:
+
+```yaml
+services:
+  openhab-mcp:
+    image: ghcr.io/drrsatzteil/openhab-mcp:latest
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8082:8000"
+    environment:
+      - OPENHAB_URL=https://your-openhab-instance
+      - OPENHAB_API_TOKEN=your-api-token
+      - OPENHAB_MCP_TRANSPORT=streamable-http
+```
+
+The MCP endpoint will be available at `http://localhost:8082/mcp`.
+
+### 2. Teleport App Service Configuration
+
+Register the container as a Teleport HTTP application — **not** as a stdio MCP app:
+
+```yaml
+app_service:
+  enabled: true
+  apps:
+    - name: openhab-mcp
+      labels:
+        role: mcp
+      uri: "http://localhost:8082"
+```
+
+### 3. tbot Application Tunnel (Client Side)
+
+On the machine running your AI assistant, configure `tbot` to create a local tunnel in `/etc/tbot.yaml`:
+
+```yaml
+services:
+  - type: application-tunnel
+    name: openhab-mcp-tunnel
+    listen: tcp://127.0.0.1:8989
+    app_name: openhab-mcp
+```
+
+tbot maintains the tunnel and automatically renews credentials, making the MCP server available locally at `http://127.0.0.1:8989`.
+
+### 4. Claude Code Configuration
+
+In `~/.claude.json`, configure the MCP server as an HTTP endpoint:
+
+```json
+{
+  "mcpServers": {
+    "openhab-mcp": {
+      "type": "http",
+      "url": "http://127.0.0.1:8989/mcp"
+    }
+  }
+}
+```
+
+### Why Not stdio Mode?
+
+Teleport's `tbot application-tunnel` requires an HTTP app. The alternative `tsh mcp connect` uses stdio transport but requires certificate reissuance, which bot credentials disallow (`disallow-reissue=true`). Running the container in `streamable-http` mode with a Teleport HTTP app avoids both limitations.
+
 ## Development
 
 ### Running Tests
