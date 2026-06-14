@@ -325,6 +325,22 @@ class TestOpenHABItems(ItemsTestBase):
         self.assertEqual(fetched_group["groupType"], "Dimmer")
         self.assertEqual(fetched_group["function"]["name"], "AVG")
 
+    def test_update_item_preserves_semantic_tags(self):
+        """Regression: update_item must send tags to openHAB when semanticTags is explicitly passed.
+        Bug was hasattr(item, 'semanticTags') always False because Pydantic stores as semantic_tags."""
+        self._register(FULL_ITEM)
+        self.session.put.return_value = resp(None, 200)
+
+        self.client.update_item(ItemUpdate(
+            name="TestItem_FullItem", type="Dimmer",
+            category="Light",
+            semanticTags=["Equipment_Lighting"],
+        ))
+
+        put_body = self.session.put.call_args[1]["json"]
+        self.assertIn("Lighting", put_body.get("tags", []),
+                      "PUT payload must include the semantic tag name when semanticTags is passed")
+
     def test_update_item_with_none_or_empty_values(self):
         initial = dict(DIMMER_ITEM,
             label="Test Item for Update", category="Light",

@@ -266,13 +266,13 @@ class OpenHABClient:
         # Handle semantic and non-semantic tags from update
         tags_explicitly_set = 'semanticTags' in payload or 'nonSemanticTags' in payload
         tags = []
-        if hasattr(item, 'semanticTags') and item.semanticTags:
+        if item.semantic_tags:
             all_tags = self.list_semantic_tags()
             for tag in all_tags:
-                if tag["uid"] in item.semanticTags:
+                if tag["uid"] in item.semantic_tags:
                     tags.append(tag["name"])
-        if hasattr(item, 'nonSemanticTags') and item.nonSemanticTags:
-            tags.extend(item.nonSemanticTags)
+        if item.non_semantic_tags:
+            tags.extend(item.non_semantic_tags)
 
         payload.pop('semanticTags', None)
         payload.pop('nonSemanticTags', None)
