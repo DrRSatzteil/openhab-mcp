@@ -1,5 +1,5 @@
-mcp==1.18.0
-python-dotenv==1.0.0
-requests==2.31.0
-pydantic==2.12.3
-packaging==25.0
+mcp==1.27.2
+python-dotenv==1.2.2
+requests==2.34.2
+pydantic==2.13.4
+packaging==26.2
