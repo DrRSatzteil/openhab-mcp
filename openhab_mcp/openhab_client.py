@@ -1861,6 +1861,101 @@ class OpenHABClient:
         response.raise_for_status()
         return True
 
+    # ===== Rename Support =====
+
+    def get_item_raw(self, item_name: str) -> Dict[str, Any]:
+        """Fetch a single item with full metadata in raw API format."""
+        response = self.session.get(
+            f"{self.base_url}/rest/items/{quote(item_name, safe='')}",
+            params={"metadata": ".*"},
+        )
+        if response.status_code == 404:
+            raise ValueError(f"Item with name '{item_name}' not found")
+        response.raise_for_status()
+        return response.json()
+
+    def put_rule_raw(self, rule_uid: str, rule_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Replace a rule with raw data (used for bulk updates like rename)."""
+        response = self.session.put(
+            f"{self.base_url}/rest/rules/{rule_uid}", json=rule_data
+        )
+        response.raise_for_status()
+        return self.get_rule(rule_uid)
+
+    def put_ui_component(self, namespace: str, uid: str, data: Dict[str, Any]) -> Dict[str, Any]:
+        """Replace a UI component in the given namespace."""
+        response = self.session.put(
+            f"{self.base_url}/rest/ui/components/{namespace}/{uid}", json=data
+        )
+        if response.status_code == 404:
+            raise ValueError(f"UI component '{uid}' in namespace '{namespace}' not found")
+        response.raise_for_status()
+        return response.json()
+
+    # ===== Inventory & Diagnose Support =====
+
+    def get_all_items_raw(self) -> List[Dict[str, Any]]:
+        """Fetch all items with full metadata and parent info for inventory indexing."""
+        response = self.session.get(
+            f"{self.base_url}/rest/items",
+            params={"metadata": ".*", "parents": "true", "staticDataOnly": "false"},
+        )
+        response.raise_for_status()
+        return response.json()
+
+    def get_all_rules_raw(self) -> List[Dict[str, Any]]:
+        """Fetch all rules with full detail (triggers, actions, conditions, scripts)."""
+        response = self.session.get(
+            f"{self.base_url}/rest/rules", params={"summary": "false"}
+        )
+        response.raise_for_status()
+        return response.json()
+
+    def get_item_links_raw(self, item_name: str) -> List[Dict[str, Any]]:
+        """Fetch all channel links for a specific item (unpaginated)."""
+        response = self.session.get(
+            f"{self.base_url}/rest/links", params={"itemName": item_name}
+        )
+        response.raise_for_status()
+        return response.json()
+
+    # --- Logging ---
+
+    def list_loggers(self, name_filter: Optional[str] = None) -> List[Dict[str, Any]]:
+        """Return all configured loggers, optionally filtered by name substring."""
+        response = self.session.get(f"{self.base_url}/rest/logging")
+        response.raise_for_status()
+        loggers = response.json().get("loggers", [])
+        if name_filter:
+            lf = name_filter.lower()
+            loggers = [l for l in loggers if lf in l.get("loggerName", "").lower()]
+        return loggers
+
+    def set_logger_level(self, logger_name: str, level: str) -> Dict[str, Any]:
+        """Set log level for a logger (creates it if not exists)."""
+        response = self.session.put(
+            f"{self.base_url}/rest/logging/{quote(logger_name, safe='')}",
+            json={"loggerName": logger_name, "level": level.upper()},
+        )
+        response.raise_for_status()
+        return {"loggerName": logger_name, "level": level.upper()}
+
+    def reset_logger(self, logger_name: str) -> None:
+        """Remove logger override — inherits level from parent."""
+        response = self.session.delete(
+            f"{self.base_url}/rest/logging/{quote(logger_name, safe='')}"
+        )
+        if response.status_code not in (200, 204):
+            response.raise_for_status()
+
+    def get_ui_components(self, namespace: str = "ui:pages") -> List[Dict[str, Any]]:
+        """Fetch UI components for a given namespace (ui:pages, ui:widgets, ui:tiles)."""
+        response = self.session.get(f"{self.base_url}/rest/ui/components/{namespace}")
+        if response.status_code == 404:
+            return []
+        response.raise_for_status()
+        return response.json()
+
     # Helper methods
     def _enhance_tags(self, tags: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         for tag in tags:

@@ -18,14 +18,9 @@ from pydantic import Field
 from mcp.server import FastMCP
 from mcp.types import TextContent
 
-from openhab_mcp.template_manager import TemplateManager, ProcessTemplate
-
-template_manager = TemplateManager()
-
 # Import our modules
 from openhab_mcp.models import (
     ItemCreate,
-    ItemUpdate,
     ItemMetadata,
     Link,
     Tag,
@@ -35,6 +30,20 @@ from openhab_mcp.models import (
     RuleUpdate,
 )
 from openhab_mcp.openhab_client import OpenHABClient
+from openhab_mcp.inventory import AdminInventory
+from openhab_mcp.overview import build_home_overview as _build_home_overview
+from openhab_mcp.audit import (
+    save_pattern as _save_pattern,
+    delete_pattern as _delete_pattern,
+    list_patterns as _list_patterns,
+    run_audit as _run_audit,
+)
+from openhab_mcp.diagnose import diagnose_item as _diagnose_item
+from openhab_mcp.rename import rename_item as _rename_item
+from openhab_mcp.batch import update_items as _update_items
+from openhab_mcp.logs import read_log as _read_log
+from openhab_mcp.blueprint import get_thing_context as _get_thing_context
+from urllib.parse import quote as _url_quote
 
 # Load environment variables from .env file
 env_file = Path(".env")
@@ -72,6 +81,8 @@ logger.info(f"  OPENHAB_MCP_TRANSPORT: {OPENHAB_MCP_TRANSPORT}")
 logger.info("  OPENHAB_API_TOKEN: Set" if os.environ.get("OPENHAB_API_TOKEN") else "  OPENHAB_API_TOKEN: Not set")
 logger.info("  OPENHAB_USERNAME: Set" if os.environ.get("OPENHAB_USERNAME") else "  OPENHAB_USERNAME: Not set")
 logger.info("  OPENHAB_PASSWORD: Set" if os.environ.get("OPENHAB_PASSWORD") else "  OPENHAB_PASSWORD: Not set")
+
+OPENHAB_LOG_PATH = os.environ.get("OPENHAB_LOG_PATH")
 
 # Get sensitive variables (not logged)
 OPENHAB_API_TOKEN = os.environ.get("OPENHAB_API_TOKEN")
@@ -202,19 +213,6 @@ def create_item(
         item: Item details to create
     """
     return openhab_client.create_item(item)
-
-
-@mcp.tool()
-def update_item(
-    item: ItemUpdate = Field(..., description="Item details to update"),
-) -> Dict[str, Any]:
-    """
-    Update an existing openHAB item
-
-    Args:
-        item: Item details to update
-    """
-    return openhab_client.update_item(item)
 
 
 @mcp.tool()
@@ -372,85 +370,6 @@ def get_item_metadata_schema() -> Dict[str, Any]:
     Get the JSON schema for creating item metadata.
     """
     return ItemMetadata.model_json_schema()
-
-
-@mcp.tool()
-def add_or_update_item_metadata(
-    item_name: str = Field(
-        ..., description="Name of the item to add or update metadata for"
-    ),
-    namespace: str = Field(..., description="Namespace of the metadata"),
-    metadata: ItemMetadata = Field(..., description="Metadata to add or update"),
-) -> Dict[str, Any]:
-    """
-    Add or update metadata for a specific openHAB item
-
-    Args:
-        item_name: Name of the item to add or update metadata for
-        namespace: Namespace of the metadata
-        metadata: Metadata to add or update
-    """
-    return openhab_client.add_or_update_item_metadata(item_name, namespace, metadata)
-
-
-@mcp.tool()
-def remove_item_metadata(
-    item_name: str = Field(..., description="Name of the item to remove metadata for"),
-    namespace: str = Field(..., description="Namespace of the metadata"),
-) -> bool:
-    """
-    Remove metadata for a specific openHAB item
-
-    Args:
-        item_name: Name of the item to remove metadata for
-        namespace: Namespace of the metadata
-    """
-    return openhab_client.remove_item_metadata(item_name, namespace)
-
-
-# Item member tools
-@mcp.tool()
-def add_item_member(
-    item_name: str = Field(..., description="Name of the item to add member for"),
-    member_item_name: str = Field(..., description="Name of the member item to add"),
-) -> Dict[str, Any]:
-    """
-    Add a member to an item (group).
-
-    Args:
-        item_name: Name of the parent item (group)
-        member_item_name: Name of the member item to add
-
-    Returns:
-        The complete updated item
-
-    Raises:
-        ValueError: If the item with the given name does not exist or is not a group item
-        ValueError: If the member item with the given name does not exist or is not editable
-    """
-    return openhab_client.add_item_member(item_name, member_item_name)
-
-
-@mcp.tool()
-def remove_item_member(
-    item_name: str = Field(..., description="Name of the item to remove member for"),
-    member_item_name: str = Field(..., description="Name of the member item to remove"),
-) -> Dict[str, Any]:
-    """
-    Remove a member from an item (group).
-
-    Args:
-        item_name: Name of the parent item (group)
-        member_item_name: Name of the member item to remove
-
-    Returns:
-        The complete updated item
-
-    Raises:
-        ValueError: If the item with the given name does not exist or is not a group item
-        ValueError: If the member item with the given name does not exist or is not editable
-    """
-    return openhab_client.remove_item_member(item_name, member_item_name)
 
 
 # Links
@@ -1012,80 +931,6 @@ def remove_item_semantic_tag(
     return openhab_client.remove_item_semantic_tag(item_name, tag_uid)
 
 
-@mcp.tool()
-def add_item_non_semantic_tag(
-    item_name: str = Field(..., description="Name of the item to add the tag to"),
-    tag_name: str = Field(..., description="Name of the tag to add"),
-) -> bool:
-    """
-    Add non-semantic tag to a specific item
-
-    Args:
-        item_name: Name of the item to add the tag to
-        tag_name: Name of the tag to add
-
-    Returns:
-        bool: True if the tag was added successfully or raises an error
-
-    Raises:
-        ValueError: If the item or tag is not found
-    """
-    return openhab_client.add_item_non_semantic_tag(item_name, tag_name)
-
-
-@mcp.tool()
-def remove_item_non_semantic_tag(
-    item_name: str = Field(..., description="Name of the item to remove tag for"),
-    tag_name: str = Field(..., description="Name of the tag to remove"),
-) -> bool:
-    """
-    Remove non-semantic tag for a specific openHAB item
-
-    Args:
-        item_name: Name of the item to remove the tag from
-        tag_name: Name of the tag to remove
-
-    Returns:
-        bool: True if the tag was removed successfully or raises an error
-
-    Raises:
-        ValueError: If the item or tag is not found
-    """
-    return openhab_client.remove_item_non_semantic_tag(item_name, tag_name)
-
-
-@mcp.tool()
-def update_item_members(
-    item_name: str = Field(description="Name of the groupitem to update members for"),
-    add_members: List[str] = Field(
-        default_factory=list, description="List of member item names to add"
-    ),
-    remove_members: List[str] = Field(
-        default_factory=list, description="List of member item names to remove"
-    ),
-) -> Dict[str, Any]:
-    """
-    Update the members of a group item by adding and/or removing members.
-
-    Args:
-        item_name: Name of the group item to update members for
-        add_members: List of member item names to add to the group
-        remove_members: List of member item names to remove from the group
-
-    Returns:
-        The updated group item
-    """
-    # Remove members first
-    for member_name in remove_members:
-        openhab_client.remove_item_member(item_name, member_name)
-
-    # Then add new members
-    for member_name in add_members:
-        openhab_client.add_item_member(item_name, member_name)
-
-    return openhab_client.list_items(filter_name=item_name, page_size=1)["items"][0]
-
-
 # Inbox Tools
 @mcp.tool()
 def list_inbox_things(
@@ -1189,120 +1034,651 @@ def delete_inbox_thing(
     return openhab_client.delete_inbox_thing(thing_uid)
 
 
-# Template Tools
+# ===== Admin Inventory & Overview =====
+
+admin_inventory = AdminInventory()
+
+
 @mcp.tool()
-def list_task_templates(
-    query: str = Field("", description="Search query string"),
-    tags: List[str] = Field(None, description="Optional list of tags to filter by"),
-    limit: int = Field(10, description="Maximum number of results to return"),
-    min_relevance: float = Field(0.1, description="Minimum relevance score (0.0 to 1.0)")
-) -> List[Dict[str, Any]]:
+def get_home_overview() -> Dict[str, Any]:
+    """Return a compact overview of the entire openHAB model as a group hierarchy.
+
+    The tree starts from root Group items (groups with no parent group) and recurses
+    downward. Each node shows:
+      - name, label, semantic class (if any)
+      - child groups (recursive)
+      - items summary: semantic points by type + non-semantic items by openHAB type
+
+    A separate 'no_group' node lists items with no group membership at all.
+
+    Requires refresh_inventory to have been called first.
+    This is the recommended first call for orientation — it replaces multiple
+    list_items/query_inventory calls for initial discovery.
     """
-    Search for task templates matching the query and optional tags. A task template can help to execute
-    more complex tasks so make sure to search here before you develop your own plan.
-    
-    Args:
-        query: Search query string
-        tags: Optional list of tags to filter by
-        limit: Maximum number of results to return
-        min_relevance: Minimum relevance score (0.0 to 1.0)
-        
-    Returns:
-        List of task template search results with metadata
+    return _build_home_overview(admin_inventory)
+
+
+@mcp.tool()
+def save_audit_pattern(
+    pattern_id: str = Field(..., description="Unique identifier for this pattern (e.g. 'gf_dimmers')"),
+    description: str = Field(..., description="Human-readable description of what the pattern asserts"),
+    expect_in_group: str = Field(..., description="Group name that all matching items should be members of"),
+    location: Optional[str] = Field(None, description="Location filter (e.g. 'Indoor_Floor_GroundFloor')"),
+    equipment: Optional[str] = Field(None, description="Equipment type filter (e.g. 'Lightbulb')"),
+    point: Optional[str] = Field(None, description="Point type filter (e.g. 'Control')"),
+    item_property: Optional[str] = Field(None, description="Property filter (e.g. 'Temperature')"),
+    item_type: Optional[str] = Field(None, description="openHAB item type filter (e.g. 'Switch', 'Dimmer')"),
+    group: Optional[str] = Field(None, description="Group membership filter"),
+    tag: Optional[str] = Field(None, description="Tag filter"),
+    has_semantic: Optional[bool] = Field(None, description="Filter items with/without any semantics"),
+    editable: Optional[bool] = Field(None, description="Filter editable/non-editable items"),
+) -> Dict[str, Any]:
+    """Save an audit pattern asserting that items matching a filter should be in a specific group.
+
+    Use this whenever the user states a membership rule such as:
+      "all battery items should be in group X"
+      "every light in the ground floor should belong to group Y"
+      "these items are missing from that group"
+
+    Patterns are reusable unit tests for the openHAB model. Example:
+      "All dimmable lights on the ground floor should be in group gGF_Dimmer"
+      → filter: location=Indoor_Floor_GroundFloor, equipment=Lightbulb
+      → expect_in_group: gGF_Dimmer
+
+    Run run_audit() to test all saved patterns against the current inventory.
+    Missing items and unexpected members are reported as findings.
     """
-    results = template_manager.search_templates(
-        query=query,
-        tags=tags,
-        limit=limit,
-        min_relevance=min_relevance
+    return _save_pattern(
+        pattern_id=pattern_id,
+        description=description,
+        expect_in_group=expect_in_group,
+        filter_kwargs={
+            "location": location, "equipment": equipment, "point": point,
+            "item_property": item_property, "item_type": item_type,
+            "group": group, "tag": tag, "has_semantic": has_semantic, "editable": editable,
+        },
     )
-    return [result for result in results]
+
 
 @mcp.tool()
-def get_task_template(template_id: str = Field(..., description="ID of the template to retrieve")) -> Optional[Dict[str, Any]]:
-    """
-    Get a task template by ID. A task template is a structured process description for recurring tasks.
-    If instructed by the user make sure to follow the template instructions as good as possible,
-    not to deviate from the step order, skip or modify steps. If confirmation of the user is required
-    make sure to ask for permission to continue. If a step fails, follow its on_fail instructions.
-    
-    Args:
-        template_id: ID of the template to retrieve
-        
-    Returns:
-        The template if found, None otherwise
-    """
-    if template := template_manager.get_template(template_id):
-        return template.dict()
-    return None
+def delete_audit_pattern(
+    pattern_id: str = Field(..., description="ID of the pattern to delete"),
+) -> Dict[str, Any]:
+    """Delete a saved audit pattern."""
+    existed = _delete_pattern(pattern_id)
+    return {"deleted": pattern_id, "existed": existed}
+
 
 @mcp.tool()
-def save_task_template_override(template_data: Dict[str, Any]) -> Dict[str, Any]:
+def list_audit_patterns() -> Dict[str, Any]:
+    """List all saved audit patterns."""
+    patterns = _list_patterns()
+    return {"count": len(patterns), "patterns": patterns}
+
+
+@mcp.tool()
+def run_audit(
+    pattern_id: Optional[str] = Field(None, description="Run only this pattern ID. If omitted, all patterns are run."),
+) -> Dict[str, Any]:
+    """Test audit patterns against the current inventory.
+
+    For each pattern, computes:
+      - missing:    items matching the filter that are NOT in the expected group
+      - unexpected: members of the expected group that do NOT match the filter
+
+    Requires refresh_inventory to have been called first.
     """
-    Save a task template to the override directory. This can be used to adjust existing templates to the
-    user's needs depending on the user's environment. This can also be used to create new templates.
-    
-    Args:
-        template_data: Task template data to save (must include metadata.id)
-        
-    Returns:
-        The saved template
-        
-    Raises:
-        ValueError: If template data is invalid or saving fails
+    return _run_audit(admin_inventory, pattern_id=pattern_id)
+
+
+@mcp.tool()
+def refresh_inventory() -> Dict[str, Any]:
+    """Reload the admin inventory from openHAB. Call this after bulk item changes
+    to ensure diagnose_item and query_inventory reflect current state.
+
+    Returns item count and available semantic filter values.
+    """
+    raw = openhab_client.get_all_items_raw()
+    admin_inventory.build(raw)
+    return {
+        "success": True,
+        "item_count": admin_inventory.size,
+        "available_filters": {
+            "locations": admin_inventory.get_available_locations(),
+            "equipment": admin_inventory.get_available_equipment(),
+            "points": admin_inventory.get_available_points(),
+            "properties": admin_inventory.get_available_properties(),
+            "item_types": admin_inventory.get_available_types(),
+            "categories": admin_inventory.get_available_categories(),
+            "metadata_namespaces": admin_inventory.get_available_metadata_namespaces(),
+        },
+    }
+
+
+@mcp.tool()
+def query_inventory(
+    location: Optional[str] = Field(None, description="Semantic location type, e.g. 'Indoor_Room_LivingRoom' or just 'LivingRoom'"),
+    equipment: Optional[str] = Field(None, description="Semantic equipment type, e.g. 'LightSource'"),
+    point: Optional[str] = Field(None, description="Semantic point type, e.g. 'Control_Switch'"),
+    item_property: Optional[str] = Field(None, description="Semantic property, e.g. 'Temperature'"),
+    item_type: Optional[str] = Field(None, description="openHAB item type, e.g. 'Switch', 'Dimmer', 'Number'"),
+    group: Optional[str] = Field(None, description="Group name — returns members of this group"),
+    tag: Optional[str] = Field(None, description="Tag name — returns items carrying this tag"),
+    state: Optional[str] = Field(None, description="Exact state value filter"),
+    category: Optional[str] = Field(None, description="UI icon category, e.g. 'window', 'light', 'temperature'"),
+    has_metadata_ns: Optional[str] = Field(None, description="Only items that HAVE this metadata namespace, e.g. 'alexa', 'listWidget'"),
+    missing_metadata_ns: Optional[str] = Field(None, description="Only items that DON'T HAVE this metadata namespace — useful for audit"),
+    has_semantic: Optional[bool] = Field(None, description="True = only items with semantic metadata"),
+    missing_semantic: Optional[bool] = Field(None, description="True = only items WITHOUT semantic metadata — useful for audit"),
+    editable: Optional[bool] = Field(None, description="True = only items editable via REST API; False = only read-only items from .items files"),
+) -> Dict[str, Any]:
+    """Query all openHAB items using semantic or admin filters.
+
+    Unlike list_items (which paginates the raw REST API), this queries the
+    in-memory AdminInventory — fast, combinable filters, no pagination needed.
+
+    Call refresh_inventory first if the inventory may be stale.
+
+    Examples:
+    - All lights in living room: equipment='LightSource', location='LivingRoom'
+    - All Switch items without semantic tag: item_type='Switch', missing_semantic=True
+    - All members of a group: group='gAllLights'
+    - All items with Alexa but missing listWidget: has_metadata_ns='alexa', missing_metadata_ns='listWidget'
+    - All window items without category set: item_type='Contact', missing_metadata_ns='alexa'
+    """
+    if admin_inventory.size == 0:
+        return {
+            "error": "Inventory is empty — call refresh_inventory first.",
+            "item_count": 0,
+            "items": [],
+        }
+
+    names = admin_inventory.get(
+        location=location,
+        equipment=equipment,
+        point=point,
+        item_property=item_property,
+        item_type=item_type,
+        group=group,
+        tag=tag,
+        state=state,
+        category=category,
+        has_metadata_ns=has_metadata_ns,
+        missing_metadata_ns=missing_metadata_ns,
+        has_semantic=has_semantic,
+        missing_semantic=missing_semantic,
+        editable=editable,
+    )
+
+    items = []
+    for name in sorted(names):
+        raw = admin_inventory.get_item(name)
+        if raw:
+            sem = raw.get("metadata", {}).get("semantics", {})
+            items.append({
+                "name": raw.get("name"),
+                "label": raw.get("label"),
+                "type": raw.get("type"),
+                "state": raw.get("state"),
+                "category": raw.get("category") or None,
+                "groups": raw.get("groupNames", []),
+                "tags": raw.get("tags", []),
+                "metadata_namespaces": list(raw.get("metadata", {}).keys()),
+                "editable": raw.get("editable", False),
+                "semantic_value": sem.get("value") if sem else None,
+            })
+
+    return {"item_count": len(items), "items": items}
+
+
+@mcp.tool()
+def update_items(
+    patch: Dict[str, Any] = Field(..., description=(
+        "JSON Merge Patch (RFC 7396). Present fields replace, null deletes, absent = unchanged. "
+        "Supported: label, category, tags, groupNames, metadata ({ns: {value,config} or null}). "
+        "tags_remove: [...] removes specific tags without touching others (use instead of null which clears all). "
+        "groups_remove: [...] removes from specific groups without touching others. "
+        "metadata.semantics is rejected — use tags/groups to change semantic class."
+    )),
+    dry_run: bool = Field(True, description="If True, return the plan without making changes (default: True)"),
+    merge: bool = Field(True, description=(
+        "True (default): tags/groupNames in patch are ADDED to existing (union). "
+        "False: tags/groupNames REPLACE existing values entirely. "
+        "null in patch always clears, regardless of merge mode. "
+        "Scalar fields (label, category) are always replaced."
+    )),
+    location: Optional[str] = Field(None, description="Semantic location filter, e.g. 'Indoor_Room_Kitchen'"),
+    equipment: Optional[str] = Field(None, description="Semantic equipment filter, e.g. 'Screen_Television'"),
+    point: Optional[str] = Field(None, description="Semantic point filter, e.g. 'Control_Switch'"),
+    item_property: Optional[str] = Field(None, description="Semantic property filter, e.g. 'Light'"),
+    item_type: Optional[str] = Field(None, description="Item type filter, e.g. 'Switch', 'Dimmer'"),
+    group: Optional[str] = Field(None, description="Group membership filter"),
+    tag: Optional[str] = Field(None, description="Tag filter"),
+    state: Optional[str] = Field(None, description="Exact state value filter"),
+    category: Optional[str] = Field(None, description="Category filter, e.g. 'light'"),
+    has_metadata_ns: Optional[str] = Field(None, description="Only items that have this metadata namespace"),
+    missing_metadata_ns: Optional[str] = Field(None, description="Only items that lack this metadata namespace"),
+    has_semantic: Optional[bool] = Field(None, description="True = only items with semantic metadata"),
+    missing_semantic: Optional[bool] = Field(None, description="True = only items without semantic metadata"),
+    editable: Optional[bool] = Field(None, description="True = only REST-editable items"),
+    item_names: Optional[List[str]] = Field(None, description="Explicit list of item names (can be combined with other filters)"),
+) -> Dict[str, Any]:
+    """Apply a JSON Merge Patch to all items matching the given filters.
+
+    This is the primary admin update tool — use it for single items (item_names=["x"])
+    or bulk operations (item_type="Switch", missing_metadata_ns="listWidget").
+
+    Always call with dry_run=True first to review what will change.
+
+    Patch examples:
+      Set category:         {"category": "lightbulb"}
+      Add metadata:         {"metadata": {"listWidget": {"value": "oh-label-card", "config": {}}}}
+      Remove metadata:      {"metadata": {"expire": null}}
+      Set label + category: {"label": "An/Aus", "category": "light"}
+      Replace tags:         {"tags": ["Switch", "Light", "Calculation"]}
+      Remove one tag:       {"tags_remove": ["OldTag"]}
+      Remove from group:    {"groups_remove": ["old_group"]}
+      Clear category:       {"category": null}
+    """
+    if admin_inventory.size == 0:
+        return {"error": "Inventory empty — call refresh_inventory first.", "matched": 0}
+    try:
+        return _update_items(
+            patch=patch,
+            inventory=admin_inventory,
+            client=openhab_client,
+            dry_run=dry_run,
+            merge=merge,
+            location=location,
+            equipment=equipment,
+            point=point,
+            item_property=item_property,
+            item_type=item_type,
+            group=group,
+            tag=tag,
+            state=state,
+            category=category,
+            has_metadata_ns=has_metadata_ns,
+            missing_metadata_ns=missing_metadata_ns,
+            has_semantic=has_semantic,
+            missing_semantic=missing_semantic,
+            editable=editable,
+            item_names=item_names,
+        )
+    except Exception as e:
+        return {"error": str(e)}
+
+
+# ===== Diagnose =====
+
+
+@mcp.tool()
+def diagnose_item(
+    item_name: str = Field(..., description="Name of the item to diagnose"),
+) -> Dict[str, Any]:
+    """Impact analysis for an item: what rules, UI components, and channel links reference it.
+
+    Use this BEFORE renaming or deleting an item to understand what would break.
+    The impact_summary tells you which references can be auto-updated and which
+    need manual review (e.g. item names inside JavaScript rule scripts).
+
+    Mirrors the openHAB Developer Sidebar's cross-entity search.
     """
     try:
-        # Validate the template data
-        template = ProcessTemplate(**template_data)
-        
-        # Save to override directory
-        if template_manager.save_override_template(template):
-            # Reload templates to update the cache
-            template_manager.reload_templates()
-            return template.model_dump()
-        else:
-            raise ValueError("Failed to save template override")
+        return _diagnose_item(item_name, openhab_client)
     except Exception as e:
-        raise ValueError(f"Invalid template data: {str(e)}")
+        return {"error": str(e), "item_name": item_name}
+
 
 @mcp.tool()
-def delete_task_template_override(template_id: str = Field(..., description="ID of the template to delete from overrides")) -> bool:
-    """
-    Delete a task template from the override directory. This can be used to remove templates that
-    are no longer needed or to revert to the default template.
-    
-    Args:
-        template_id: ID of the template to delete
-        
-    Returns:
-        bool: True if deleted or didn't exist, False on error
+def rename_item(
+    old_name: str = Field(..., description="Current item name"),
+    new_name: str = Field(..., description="Target item name (must not already exist)"),
+    dry_run: bool = Field(True, description="If True, return the plan without making changes (default: True)"),
+    skip_script_rule_uids: Optional[List[str]] = Field(
+        None,
+        description="Rule UIDs whose script bodies should NOT be auto-patched. "
+                    "These rules are flagged for manual follow-up via update_rule_script_action.",
+    ),
+) -> Dict[str, Any]:
+    """Rename an item and update all its references across rules and UI.
+
+    Workflow:
+      1. Call diagnose_item(old_name) to review what will be affected.
+      2. Call rename_item(old_name, new_name, dry_run=True) to see the full plan.
+      3. Review script_excerpts in the plan — decide which rule UIDs to skip.
+      4. Call rename_item(old_name, new_name, dry_run=False) to execute.
+
+    What is updated automatically:
+      - Structured rule configs (triggers/conditions/actions with itemName fields)
+      - Script bodies where the item name appears as a word (unless rule UID is skipped)
+      - UI pages and widgets (JSON search-replace)
+      - Channel links (copied to new item, old links removed with old item)
+      - Item metadata (all namespaces except semantics, which comes from tags/groups)
+
+    What needs manual follow-up (flagged in manual_review_required):
+      - Script bodies in rules listed in skip_script_rule_uids
+
+    The old item is deleted last, after all references are updated.
     """
     try:
-        success = template_manager.delete_override_template(template_id)
-        if success:
-            template_manager.reload_templates()
-        return success
+        return _rename_item(
+            old_name=old_name,
+            new_name=new_name,
+            client=openhab_client,
+            dry_run=dry_run,
+            skip_script_rule_uids=skip_script_rule_uids,
+        )
     except Exception as e:
-        raise ValueError(f"Failed to delete template override: {str(e)}")
+        return {"error": str(e), "old_name": old_name, "new_name": new_name}
+
 
 @mcp.tool()
-def get_task_template_schema() -> Dict[str, Any]:
-    """
-    Get the JSON schema for a task template. This can be used to validate template data before saving.
-    
-    Returns:
-        The JSON schema for a task template, generated from Pydantic models
-    """
-    # Generate schema from the ProcessTemplate Pydantic model
-    schema = ProcessTemplate.model_json_schema()
-    
-    # Add any additional schema customization if needed
-    # For example, you might want to add descriptions or examples
-    
-    return schema
+def manage_logs(
+    action: str = Field(
+        ...,
+        description="Action to perform: list_loggers | set_level | reset_level | read",
+    ),
+    logger_name: Optional[str] = Field(
+        None,
+        description="Logger name (e.g. 'org.openhab.binding.zwave'). "
+                    "Used by: set_level, reset_level. For list_loggers: optional substring filter.",
+    ),
+    level: Optional[str] = Field(
+        None,
+        description="Log level: ERROR | WARN | INFO | DEBUG | TRACE. Used by: set_level.",
+    ),
+    log_type: str = Field(
+        "openhab",
+        description="Log file to read: 'openhab' (default) or 'events'. Used by: read.",
+    ),
+    since: Optional[str] = Field(
+        None,
+        description="Start of time window. ISO datetime ('2024-01-15T10:00:00') or relative ('1h', '30m', '2d'). Used by: read.",
+    ),
+    until: Optional[str] = Field(
+        None,
+        description="End of time window. ISO datetime or relative. Defaults to now. Used by: read.",
+    ),
+    query: Optional[str] = Field(
+        None,
+        description="Case-insensitive text filter applied to each log line. Used by: read.",
+    ),
+    level_filter: Optional[str] = Field(
+        None,
+        description="Filter lines by log level: ERROR | WARN | INFO | DEBUG | TRACE. Used by: read.",
+    ),
+    max_lines: int = Field(
+        200,
+        description="Maximum number of lines to return (default 200, max 1000). Used by: read.",
+    ),
+) -> Dict[str, Any]:
+    """Manage openHAB loggers and read log files.
 
-# Add the template manager to the MCP instance
-mcp.template_manager = template_manager
+    Logger management (via REST API — always available):
+      list_loggers  — list all configured loggers; logger_name filters by substring
+      set_level     — set log level for a logger (creates it if not configured)
+      reset_level   — remove logger override (inherits from parent)
+
+    Log reading (requires OPENHAB_LOG_PATH env var + volume mount):
+      read          — read openhab.log or events.log with optional time window,
+                      text query, and level filter.
+
+    To enable log reading, mount the openHAB log directory into the container and
+    set OPENHAB_LOG_PATH=/path/to/logs in your .env file. Example docker-compose:
+      volumes:
+        - /opt/openhab/userdata/logs:/app/logs:ro
+      environment:
+        - OPENHAB_LOG_PATH=/app/logs
+    """
+    if action == "list_loggers":
+        try:
+            return {"loggers": openhab_client.list_loggers(name_filter=logger_name)}
+        except Exception as e:
+            return {"error": str(e)}
+
+    elif action == "set_level":
+        if not logger_name:
+            return {"error": "logger_name is required for set_level"}
+        if not level:
+            return {"error": "level is required for set_level (ERROR|WARN|INFO|DEBUG|TRACE)"}
+        if level.upper() not in {"ERROR", "WARN", "INFO", "DEBUG", "TRACE", "OFF"}:
+            return {"error": f"Invalid level '{level}'. Use: ERROR, WARN, INFO, DEBUG, TRACE, OFF"}
+        try:
+            return openhab_client.set_logger_level(logger_name, level)
+        except Exception as e:
+            return {"error": str(e)}
+
+    elif action == "reset_level":
+        if not logger_name:
+            return {"error": "logger_name is required for reset_level"}
+        try:
+            openhab_client.reset_logger(logger_name)
+            return {"reset": logger_name, "note": "Logger removed — inherits level from parent"}
+        except Exception as e:
+            return {"error": str(e)}
+
+    elif action == "read":
+        if not OPENHAB_LOG_PATH:
+            return {
+                "error": "OPENHAB_LOG_PATH is not configured.",
+                "hint": (
+                    "Mount the openHAB log directory into the container and set "
+                    "OPENHAB_LOG_PATH in your .env file. Example:\n"
+                    "  volumes:\n"
+                    "    - /opt/openhab/userdata/logs:/app/logs:ro\n"
+                    "  environment:\n"
+                    "    - OPENHAB_LOG_PATH=/app/logs"
+                ),
+            }
+        try:
+            return _read_log(
+                log_path=OPENHAB_LOG_PATH,
+                log_type=log_type,
+                since=since,
+                until=until,
+                query=query,
+                level=level_filter,
+                max_lines=max_lines,
+            )
+        except Exception as e:
+            return {"error": str(e)}
+
+    else:
+        return {"error": f"Unknown action '{action}'. Use: list_loggers | set_level | reset_level | read"}
+
+
+@mcp.tool()
+def get_thing_context(
+    thing_uid: str = Field(
+        ...,
+        description="UID of the thing (e.g. 'enocean:windowSashHandleSensor:bridge:abc123'). "
+                    "Use list_things to find the correct UID.",
+    ),
+) -> Dict[str, Any]:
+    """Get the structural context of a thing: channels, linked items, and position in the semantic model.
+
+    Use this to understand what a thing does and where it lives in the home model —
+    not for impact analysis (use diagnose_item for that).
+
+    Returns:
+      thing             — basic thing info (UID, label, type, status, configuration)
+      thing_channels    — all channels (linked and unlinked) with item types
+      linked_channels   — channels with linked items + full item profiles
+                          (type, label, semantic tags, group memberships, metadata)
+      equipment_context — group hierarchy from the Location anchor down to the items
+
+    Use cases:
+      - Understand what a thing does and which items/groups it drives
+      - See where a thing fits in the semantic location hierarchy
+      - Use as a template when onboarding a new device of the same type
+        ("add the new kitchen window sensor exactly like the one in the dining room")
+      - Before replace_thing: confirm you have the right thing and understand its links
+      - Follow up with diagnose_item on specific linked items to assess rule/UI impact
+
+    Requires refresh_inventory to have been called first.
+    """
+    if admin_inventory.size == 0:
+        return {"error": "Inventory empty — call refresh_inventory first."}
+    return _get_thing_context(
+        thing_uid=thing_uid,
+        client=openhab_client,
+        inventory=admin_inventory,
+    )
+
+
+@mcp.tool()
+def replace_thing(
+    old_thing_uid: str = Field(
+        ...,
+        description="UID of the thing to be replaced (the broken/old device). Use list_things to find it.",
+    ),
+    new_thing_uid: str = Field(
+        ...,
+        description="UID of the replacement thing (the new device, already added to openHAB).",
+    ),
+    channel_mapping: Optional[Dict[str, str]] = Field(
+        None,
+        description=(
+            "Optional mapping of old channel IDs to new channel IDs, for cases where "
+            "the channel IDs differ between old and new thing (different firmware or model variant). "
+            "Example: {'status': 'power_state'} maps channel 'status' → 'power_state'. "
+            "Omit if channel IDs are identical (same model replacement)."
+        ),
+    ),
+    delete_old_links: bool = Field(
+        True,
+        description="Delete the links on the old thing after creating new links (default: True).",
+    ),
+    delete_old_thing: bool = Field(
+        False,
+        description=(
+            "Delete the old thing after re-linking (default: False). "
+            "Recommended: leave False, verify everything is ONLINE first, then delete manually."
+        ),
+    ),
+    dry_run: bool = Field(
+        True,
+        description="If True (default), only show the plan — no changes are made. Always review first.",
+    ),
+) -> Dict[str, Any]:
+    """Re-map all channel links from an old thing to a replacement thing.
+
+    Use this when a device needs to be physically replaced with a new unit
+    (e.g. a defective Shelly swapped for an identical model). All Items remain
+    unchanged — only the channel links are updated to point to the new thing.
+    The old Items keep their names, semantic tags, group memberships, and rules.
+
+    Workflow:
+      1. Add the new thing to openHAB (approve from inbox or use create_thing).
+      2. Call replace_thing(old_uid, new_uid, dry_run=True) to review the plan.
+      3. Call replace_thing(old_uid, new_uid, dry_run=False) to execute.
+      4. Verify Items are receiving values (check states, check logs).
+      5. Optionally delete the old thing.
+
+    If the new device has different channel IDs (different firmware version or model),
+    provide channel_mapping to translate old IDs to new ones.
+    """
+    try:
+        resp = openhab_client.session.get(f"{openhab_client.base_url}/rest/links")
+        resp.raise_for_status()
+        all_links: List[Dict[str, Any]] = resp.json()
+    except Exception as e:
+        return {"error": f"Failed to fetch links: {e}"}
+
+    prefix = old_thing_uid + ":"
+    old_links = [lnk for lnk in all_links if lnk.get("channelUID", "").startswith(prefix)]
+
+    if not old_links:
+        return {
+            "error": f"No links found for thing '{old_thing_uid}'.",
+            "hint": "Check the thing UID with list_things. Links are matched by channelUID prefix.",
+        }
+
+    # Build the re-mapping plan
+    plan = []
+    for lnk in old_links:
+        old_ch_uid = lnk["channelUID"]
+        ch_id = old_ch_uid[len(prefix):]
+        new_ch_id = (channel_mapping or {}).get(ch_id, ch_id)
+        new_ch_uid = f"{new_thing_uid}:{new_ch_id}"
+        plan.append({
+            "item_name": lnk["itemName"],
+            "old_channel_uid": old_ch_uid,
+            "new_channel_uid": new_ch_uid,
+            "configuration": lnk.get("configuration", {}),
+        })
+
+    if dry_run:
+        return {
+            "dry_run": True,
+            "old_thing_uid": old_thing_uid,
+            "new_thing_uid": new_thing_uid,
+            "links_found": len(plan),
+            "will_delete_old_links": delete_old_links,
+            "will_delete_old_thing": delete_old_thing,
+            "plan": plan,
+        }
+
+    # Execute: create new links
+    created = []
+    errors = []
+
+    for step in plan:
+        try:
+            openhab_client.session.put(
+                f"{openhab_client.base_url}/rest/links"
+                f"/{_url_quote(step['item_name'], safe='')}"
+                f"/{step['new_channel_uid'].replace('#', '%23')}",
+                json={
+                    "itemName": step["item_name"],
+                    "channelUID": step["new_channel_uid"],
+                    "configuration": step["configuration"],
+                },
+            ).raise_for_status()
+            created.append({"item": step["item_name"], "channel": step["new_channel_uid"]})
+        except Exception as e:
+            errors.append({"item": step["item_name"], "channel": step["new_channel_uid"], "error": str(e)})
+
+    # Delete old links (only items that were successfully re-linked)
+    deleted_links = []
+    if delete_old_links:
+        created_items = {c["item"] for c in created}
+        for lnk in old_links:
+            if lnk["itemName"] not in created_items:
+                continue  # skip if new link failed
+            try:
+                openhab_client.session.delete(
+                    f"{openhab_client.base_url}/rest/links"
+                    f"/{_url_quote(lnk['itemName'], safe='')}"
+                    f"/{lnk['channelUID'].replace('#', '%23')}",
+                ).raise_for_status()
+                deleted_links.append(lnk["itemName"])
+            except Exception as e:
+                errors.append({"delete_link": lnk["itemName"], "error": str(e)})
+
+    # Optionally delete old thing
+    thing_deleted = False
+    if delete_old_thing and not errors:
+        try:
+            openhab_client.session.delete(
+                f"{openhab_client.base_url}/rest/things/{_url_quote(old_thing_uid, safe='')}",
+            ).raise_for_status()
+            thing_deleted = True
+        except Exception as e:
+            errors.append({"delete_thing": old_thing_uid, "error": str(e)})
+
+    return {
+        "dry_run": False,
+        "old_thing_uid": old_thing_uid,
+        "new_thing_uid": new_thing_uid,
+        "links_created": len(created),
+        "links_deleted": len(deleted_links),
+        "thing_deleted": thing_deleted,
+        "errors": errors,
+        "status": "ok" if not errors else "partial",
+    }
+
 
 def run_server():
     """Run the MCP server with the configured transport."""

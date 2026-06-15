@@ -9,8 +9,11 @@ services:
       - .env
     environment:
       - PYTHONUNBUFFERED=1
+      - TZ=Europe/Berlin  # must match openHAB timezone for manage_logs time filters
     volumes:
-      - ./process_templates_override:/app/openhab_mcp/process_templates/override
+      # Optional: mount openHAB log directory for manage_logs read action
+      # - /opt/openhab/userdata/logs:/app/logs:ro
+      # Then set in .env: OPENHAB_LOG_PATH=/app/logs
     networks:
       - openhab-network
 
