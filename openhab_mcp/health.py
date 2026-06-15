@@ -204,10 +204,10 @@ def _group_anomalies(inventory: AdminInventory) -> Dict[str, Any]:
         candidates = []
         for item in all_items:
             name = item["name"]
-            if name in members:
+            if name in members or name == group_name:
                 continue
             score, struct_score, top_feats = _score(feat(item), profile)
-            if score >= _MIN_SCORE and struct_score >= 0.15:
+            if score >= _MIN_SCORE and struct_score >= 0.20:
                 candidates.append({
                     "item": name,
                     "label": item.get("label", ""),
