@@ -14,8 +14,6 @@ services:
       - .env
     environment:
       - PYTHONUNBUFFERED=1
-    volumes:
-      - ../openhab_mcp/process_templates/override:/app/openhab_mcp/process_templates/override
     networks:
       - openhab-network
 

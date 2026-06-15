@@ -58,23 +58,19 @@ This project implements an MCP server that connects to an openHAB instance via i
 
 ## Quick Start with Docker Compose
 
-The easiest way to get started is using the provided Docker Compose configuration:
+The easiest way to get started is using the pre-built image from GHCR:
 
-1. Clone the repository:
+1. Download the compose file and example environment:
    ```bash
-   git clone https://github.com/DrRSatzteil/openhab-mcp.git
-   cd openhab-mcp
+   curl -O https://raw.githubusercontent.com/DrRSatzteil/openhab-mcp/main/docker/docker-compose.prod.yml
+   curl -O https://raw.githubusercontent.com/DrRSatzteil/openhab-mcp/main/docker/.env.example
+   mv .env.example .env
+   # Edit .env with your settings
    ```
 
-2. Copy the example environment file to the docker directory and update it with your configuration:
+2. Start the service:
    ```bash
-   cp docker/.env.example docker/.env
-   # Edit docker/.env with your settings
-   ```
-
-3. Start the service:
-   ```bash
-   docker compose -f docker/docker-compose.yml up -d
+   docker compose -f docker-compose.prod.yml up -d
    ```
 
 ## Manual Installation
