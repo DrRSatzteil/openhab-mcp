@@ -356,18 +356,24 @@ def _group_consistency(inventory: AdminInventory) -> Dict[str, Any]:
         anomalies = []
 
         # 1. Item-type consistency
-        type_counts: Counter = Counter(i.get("type", "") for i in member_items)
-        for itype, count in type_counts.items():
-            if not itype or count / n < _CONSISTENCY_THRESHOLD:
-                continue
-            outliers = sorted(i["name"] for i in member_items if i.get("type", "") != itype)
-            if outliers:
-                anomalies.append({
-                    "check": "type",
-                    "expected": itype,
-                    "present_in": count,
-                    "outliers": outliers,
-                })
+        # Exclude Group-type items: groups serve as containers and naturally coexist
+        # with concrete items in location/equipment groups — they are structural noise
+        # for type-consistency. Only analyse concrete (non-Group) items.
+        concrete = [i for i in member_items if not i.get("type", "").startswith("Group")]
+        n_c = len(concrete)
+        if n_c >= _MIN_GROUP_MEMBERS:
+            type_counts: Counter = Counter(i.get("type", "") for i in concrete)
+            for itype, count in type_counts.items():
+                if not itype or count / n_c < _CONSISTENCY_THRESHOLD:
+                    continue
+                outliers = sorted(i["name"] for i in concrete if i.get("type", "") != itype)
+                if outliers:
+                    anomalies.append({
+                        "check": "type",
+                        "expected": itype,
+                        "present_in": count,
+                        "outliers": outliers,
+                    })
 
         # 2. Name-token consistency (tokens from "_"-split names)
         name_tok_counts: Counter = Counter()
