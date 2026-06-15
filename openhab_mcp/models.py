@@ -90,10 +90,6 @@ class ItemCreate(ItemBase):
     metadata: Optional[Dict[str, ItemMetadata]] = Field(default_factory=dict, description="Metadata of the item")
     group_names: List[str] = Field(default_factory=list, description="List of group names for the item", alias="groupNames")
 
-class ItemUpdate(ItemBase):
-    name: str = Field(..., description="Name of the item")
-    type: str = Field(..., description="Type of the item")
-
 class ThingBase(BaseModel):
     UID: Optional[str] = Field(None, description="UID of the thing")
     thingTypeUID: Optional[str] = Field(None, description="Type of the thing")

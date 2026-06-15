@@ -5,10 +5,6 @@ Returns:
   thing_channels    — all channels (linked and unlinked) with item types
   linked_channels   — channels that have items, with full item profiles
   equipment_context — group hierarchy from Location anchor down to the items
-
-Useful for understanding what a thing does (which items it drives, where they
-live in the semantic model) as well as for onboarding a new device of the same
-type at a different location.
 """
 
 from typing import Any, Dict, List, Optional, Set, Tuple
@@ -100,12 +96,12 @@ def get_thing_context(
     client: Any,
     inventory: AdminInventory,
 ) -> Dict[str, Any]:
-    """Build a blueprint of an existing thing for use as an onboarding template.
+    """Return complete structural context of a thing.
 
     Parameters
     ----------
     thing_uid:
-        UID of the template thing (e.g. 'mqtt:topic:broker:EsszimmerRollladen').
+        UID of the thing (e.g. 'mqtt:topic:broker:EsszimmerRollladen').
     client:
         OpenHABClient instance.
     inventory:
@@ -224,20 +220,4 @@ def get_thing_context(
         "thing_channels": thing_channels_out,
         "linked_channels": linked_channels_out,
         "equipment_context": equipment_context,
-        "onboarding_hint": (
-            "How to use this blueprint to onboard a new device:\n"
-            "1. equipment_context shows the group hierarchy to replicate. "
-            "Groups with semantic 'Location_*' are ANCHORS that already exist — "
-            "do NOT create them. Ask the user which location group to attach to.\n"
-            "2. Groups with semantic 'Equipment_*' must be created for the new location "
-            "with adapted names (replace the room/location name prefix). Preserve type, "
-            "group_function, and semantic tag. Add each as a member of its parent group.\n"
-            "3. For each item in linked_channels: create a new item with an adapted name, "
-            "matching type/label/category/semantic/metadata/tags. Link it to the "
-            "corresponding channel on the new thing. Add it to the replicated Equipment group.\n"
-            "4. Use get_home_overview to see existing groups at the target location "
-            "before deciding what needs to be created vs what already exists.\n"
-            "5. After onboarding, use diagnose_item on the template items to find rules "
-            "that may need to be extended or cloned for the new device."
-        ),
     }

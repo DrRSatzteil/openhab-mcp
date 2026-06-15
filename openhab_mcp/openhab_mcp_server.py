@@ -32,12 +32,6 @@ from openhab_mcp.models import (
 from openhab_mcp.openhab_client import OpenHABClient
 from openhab_mcp.inventory import AdminInventory
 from openhab_mcp.overview import build_home_overview as _build_home_overview
-from openhab_mcp.audit import (
-    save_pattern as _save_pattern,
-    delete_pattern as _delete_pattern,
-    list_patterns as _list_patterns,
-    run_audit as _run_audit,
-)
 from openhab_mcp.diagnose import diagnose_item as _diagnose_item
 from openhab_mcp.rename import rename_item as _rename_item
 from openhab_mcp.batch import update_items as _update_items
@@ -1060,79 +1054,6 @@ def get_home_overview() -> Dict[str, Any]:
 
 
 @mcp.tool()
-def save_audit_pattern(
-    pattern_id: str = Field(..., description="Unique identifier for this pattern (e.g. 'gf_dimmers')"),
-    description: str = Field(..., description="Human-readable description of what the pattern asserts"),
-    expect_in_group: str = Field(..., description="Group name that all matching items should be members of"),
-    location: Optional[str] = Field(None, description="Location filter (e.g. 'Indoor_Floor_GroundFloor')"),
-    equipment: Optional[str] = Field(None, description="Equipment type filter (e.g. 'Lightbulb')"),
-    point: Optional[str] = Field(None, description="Point type filter (e.g. 'Control')"),
-    item_property: Optional[str] = Field(None, description="Property filter (e.g. 'Temperature')"),
-    item_type: Optional[str] = Field(None, description="openHAB item type filter (e.g. 'Switch', 'Dimmer')"),
-    group: Optional[str] = Field(None, description="Group membership filter"),
-    tag: Optional[str] = Field(None, description="Tag filter"),
-    has_semantic: Optional[bool] = Field(None, description="Filter items with/without any semantics"),
-    editable: Optional[bool] = Field(None, description="Filter editable/non-editable items"),
-) -> Dict[str, Any]:
-    """Save an audit pattern asserting that items matching a filter should be in a specific group.
-
-    Use this whenever the user states a membership rule such as:
-      "all battery items should be in group X"
-      "every light in the ground floor should belong to group Y"
-      "these items are missing from that group"
-
-    Patterns are reusable unit tests for the openHAB model. Example:
-      "All dimmable lights on the ground floor should be in group gGF_Dimmer"
-      → filter: location=Indoor_Floor_GroundFloor, equipment=Lightbulb
-      → expect_in_group: gGF_Dimmer
-
-    Run run_audit() to test all saved patterns against the current inventory.
-    Missing items and unexpected members are reported as findings.
-    """
-    return _save_pattern(
-        pattern_id=pattern_id,
-        description=description,
-        expect_in_group=expect_in_group,
-        filter_kwargs={
-            "location": location, "equipment": equipment, "point": point,
-            "item_property": item_property, "item_type": item_type,
-            "group": group, "tag": tag, "has_semantic": has_semantic, "editable": editable,
-        },
-    )
-
-
-@mcp.tool()
-def delete_audit_pattern(
-    pattern_id: str = Field(..., description="ID of the pattern to delete"),
-) -> Dict[str, Any]:
-    """Delete a saved audit pattern."""
-    existed = _delete_pattern(pattern_id)
-    return {"deleted": pattern_id, "existed": existed}
-
-
-@mcp.tool()
-def list_audit_patterns() -> Dict[str, Any]:
-    """List all saved audit patterns."""
-    patterns = _list_patterns()
-    return {"count": len(patterns), "patterns": patterns}
-
-
-@mcp.tool()
-def run_audit(
-    pattern_id: Optional[str] = Field(None, description="Run only this pattern ID. If omitted, all patterns are run."),
-) -> Dict[str, Any]:
-    """Test audit patterns against the current inventory.
-
-    For each pattern, computes:
-      - missing:    items matching the filter that are NOT in the expected group
-      - unexpected: members of the expected group that do NOT match the filter
-
-    Requires refresh_inventory to have been called first.
-    """
-    return _run_audit(admin_inventory, pattern_id=pattern_id)
-
-
-@mcp.tool()
 def refresh_inventory() -> Dict[str, Any]:
     """Reload the admin inventory from openHAB. Call this after bulk item changes
     to ensure diagnose_item and query_inventory reflect current state.
@@ -1686,23 +1607,25 @@ def replace_thing(
 def analyze_model_health() -> Dict[str, Any]:
     """Statistical health analysis of the openHAB item model. No configuration needed.
 
-    Runs two analyses automatically derived from the current inventory:
+    Runs four analyses automatically derived from the current inventory:
 
     1. group_membership_anomalies
-       Builds a statistical profile for each collection group (item type, name tokens,
-       semantic class, co-group memberships, metadata namespaces). Items not in the group
-       that closely match the profile are flagged as candidates.
-       Score ∈ [0,1]: how well the item matches the average group member.
+       TF-IDF profile per group. Items outside the group that statistically resemble
+       its members are flagged as candidates ("should this be in the group?").
 
     2. equipment_completeness
-       For each semantic Equipment type (Window, MultiSensor, RollerShutter, …),
-       derives the set of semantic points present in ≥60% of instances.
-       Equipment groups missing expected points are reported as incomplete.
+       For each semantic Equipment type, derives the set of Points present in ≥60%
+       of instances. Equipment missing expected points is flagged as incomplete.
+       Points present in ≤1 instance are flagged as rare (potential inconsistency).
 
-    Use cases:
-      - Find items accidentally left out of aggregation groups
-      - Detect equipment with missing sensors/controls compared to similar equipment
-      - Identify structural inconsistencies across rooms
+    3. group_consistency
+       Within-group majority voting (≥75%) on item type, name tokens, and label tokens.
+       Members deviating from the dominant pattern are flagged as outliers.
+
+    4. group_member_outliers (leave-one-out)
+       For each group member, builds a TF profile from the other N-1 members and scores
+       the member against it. Members scoring ≥1.5 std-devs below the group mean are
+       flagged as potential misplacements.
 
     Requires refresh_inventory to have been called first.
     """
