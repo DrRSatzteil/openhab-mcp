@@ -9,8 +9,9 @@ This project implements an MCP server that connects to an openHAB instance via i
 ### Key Features
 
 #### Items Management
-- List, view, create, update, and delete items
-- Get and update item states
+- List, view, create, and delete items
+- Batch update labels, categories, metadata and group memberships (`update_items`)
+- Get and update item states, send commands
 - Manage item metadata and tags
 - Handle item persistence data
 - Support for group items and members
@@ -18,8 +19,24 @@ This project implements an MCP server that connects to an openHAB instance via i
 #### Things Management
 - List all things with pagination
 - View detailed information about specific things
+- Full structural context of a thing including linked items and semantic position (`get_thing_context`)
+- Migrate all channel links when replacing hardware (`replace_thing`)
 - Manage thing channels and links
 - Handle inbox items (approve, ignore, delete)
+
+#### Admin & Diagnostics
+- In-memory inventory with rich cross-item filtering (`query_inventory`)
+- Impact analysis for a single item across rules, sitemaps and groups (`diagnose_item`)
+- Safe atomic item rename with reference updates (`rename_item`)
+- High-level home overview: item counts, thing status, offline devices (`get_home_overview`)
+- Adjust openHAB logger levels at runtime (`manage_logs`)
+
+#### Model Health Analysis
+- Statistical analysis of the semantic item model (`analyze_model_health`)
+  - TF-IDF group anomaly detection
+  - Equipment completeness checks
+  - Majority-vote type/name/label consistency
+  - Leave-one-out outlier scoring
 
 #### Rules & Scripts
 - Full CRUD operations for rules
@@ -45,7 +62,7 @@ The easiest way to get started is using the provided Docker Compose configuratio
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/yourusername/openhab-mcp.git
+   git clone https://github.com/DrRSatzteil/openhab-mcp.git
    cd openhab-mcp
    ```
 
@@ -211,13 +228,12 @@ The MCP server provides a comprehensive set of tools for managing your openHAB s
 - `list_items` - List items with pagination and filtering
 - `get_item` - Get detailed information about a specific item
 - `create_item` - Create a new item
-- `update_item` - Update an existing item
+- `update_items` - Batch update labels, categories, metadata and group memberships
 - `delete_item` - Remove an item
 - `get_item_state` - Get current state of an item
-- `update_item_state` - Update item state
-- `send_command` - Send a command to an item
+- `update_item_state` - Write state directly (virtual items, sensor injection)
+- `send_command` - Send a command via the event bus (actuators, triggers rules)
 - `get_item_persistence` - Retrieve historical state data
-- `update_item_members` - Update group item members in bulk
 
 ### Item Metadata & Tags
 - `get_item_metadata_namespaces` - List metadata namespaces
@@ -240,6 +256,8 @@ The MCP server provides a comprehensive set of tools for managing your openHAB s
 - `update_thing` - Modify existing things
 - `delete_thing` - Remove things
 - `get_thing_channels` - List thing channels
+- `get_thing_context` - Full structural context: channels, linked items, semantic position
+- `replace_thing` - Migrate all channel links to a new thing (hardware replacement)
 - `list_links` - View item-thing links
 - `get_link` - Get link details
 - `create_or_update_link` - Manage links
@@ -267,12 +285,14 @@ The MCP server provides a comprehensive set of tools for managing your openHAB s
 - `unignore_inbox_thing` - Reconsider ignored devices
 - `delete_inbox_thing` - Remove from inbox
 
-### Task Automation
-- `list_task_templates` - Find automation templates
-- `get_task_template` - Get template details
-- `save_task_template_override` - Customize templates
-- `delete_task_template_override` - Remove custom templates
-- `get_task_template_schema` - View template structure
+### Admin & Diagnostics
+- `refresh_inventory` - Build in-memory item index (required before query/diagnose/health)
+- `query_inventory` - Rich cross-item filtering by type, location, tag, semantic presence, and more
+- `diagnose_item` - Impact analysis: rules, sitemaps, groups and links for a single item
+- `rename_item` - Atomic rename with reference updates across rules, UI pages and groups
+- `get_home_overview` - High-level home snapshot: counts, thing status, offline devices
+- `manage_logs` - View and adjust openHAB logger levels
+- `analyze_model_health` - Statistical model health analysis (anomalies, completeness, outliers)
 
 ## Teleport Integration
 
