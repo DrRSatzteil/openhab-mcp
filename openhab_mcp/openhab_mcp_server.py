@@ -252,12 +252,15 @@ def update_item_state(
         ],
     ),
 ) -> bool:
-    """
-    Update the state of an openHAB item
+    """Write a state value directly to an openHAB item, bypassing automation.
 
-    Args:
-        item_name: Name of the item to update state for
-        state: State to update the item to. Allowed states depend on the item type
+    Use this for virtual items (e.g. String/Number items that store config or
+    status) or to inject a sensor reading without triggering rules. The state
+    is persisted immediately but no command event is fired, so linked hardware
+    and rules that react to commands are NOT triggered.
+
+    Contrast with send_command, which routes through the event bus and is the
+    right choice for controlling actuators.
     """
     return openhab_client.update_item_state(item_name, state)
 
@@ -279,12 +282,14 @@ def send_command(
         ],
     ),
 ) -> bool:
-    """
-    Send a command to an openHAB item
+    """Send a command to an openHAB item via the event bus.
 
-    Args:
-        item_name: Name of the item to send command to
-        command: Command to send to the item. Allowed commands depend on the item type
+    Use this to control devices: the command is processed by the item's
+    automation logic, forwarded to linked hardware, and may trigger rules.
+    This is the right choice for actuators (lights, switches, thermostats).
+
+    Contrast with update_item_state, which writes state directly and bypasses
+    automation — use that only for virtual items or injecting sensor readings.
     """
     return openhab_client.send_command(item_name, command)
 
