@@ -1503,9 +1503,7 @@ def replace_thing(
     provide channel_mapping to translate old IDs to new ones.
     """
     try:
-        resp = openhab_client.session.get(f"{openhab_client.base_url}/rest/links")
-        resp.raise_for_status()
-        all_links: List[Dict[str, Any]] = resp.json()
+        all_links: List[Dict[str, Any]] = openhab_client.get_all_links_raw()
     except Exception as e:
         return {"error": f"Failed to fetch links: {e}"}
 
