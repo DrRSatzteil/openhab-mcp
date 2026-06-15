@@ -31,6 +31,7 @@ _MAX_GROUPS = 25            # max groups in anomaly report (highest-candidate fi
 _COMPLETENESS_THRESHOLD = 0.6  # fraction of equipment that must have a point for it to be "expected"
 _RARITY_MAX_COUNT = 1          # points present in ≤ this many instances are "rare"
 _MIN_EQUIPMENT_INSTANCES = 2   # need at least this many to derive a pattern
+_CONSISTENCY_THRESHOLD = 0.75  # fraction of group members that must share a pattern for it to be "expected"
 
 
 # ── feature extraction ───────────────────────────────────────────────────────
@@ -334,6 +335,106 @@ def _equipment_completeness(inventory: AdminInventory) -> Dict[str, Any]:
     }
 
 
+# ── analysis 3: group consistency ───────────────────────────────────────────
+
+def _group_consistency(inventory: AdminInventory) -> Dict[str, Any]:
+    all_items = inventory.all_items()
+    by_name = {i["name"]: i for i in all_items}
+
+    findings = []
+
+    for group_name in inventory.get_available_groups():
+        members = inventory.get_direct_members(group_name)
+        if len(members) < _MIN_GROUP_MEMBERS:
+            continue
+
+        member_items = [by_name[n] for n in members if n in by_name]
+        n = len(member_items)
+        if n < _MIN_GROUP_MEMBERS:
+            continue
+
+        anomalies = []
+
+        # 1. Item-type consistency
+        type_counts: Counter = Counter(i.get("type", "") for i in member_items)
+        for itype, count in type_counts.items():
+            if not itype or count / n < _CONSISTENCY_THRESHOLD:
+                continue
+            outliers = sorted(i["name"] for i in member_items if i.get("type", "") != itype)
+            if outliers:
+                anomalies.append({
+                    "check": "type",
+                    "expected": itype,
+                    "present_in": count,
+                    "outliers": outliers,
+                })
+
+        # 2. Name-token consistency (tokens from "_"-split names)
+        name_tok_counts: Counter = Counter()
+        for i in member_items:
+            for tok in set(i.get("name", "").split("_")):
+                if len(tok) > 2:
+                    name_tok_counts[tok] += 1
+
+        for tok, count in name_tok_counts.items():
+            if count / n < _CONSISTENCY_THRESHOLD:
+                continue
+            outliers = sorted(
+                i["name"] for i in member_items
+                if tok not in set(i.get("name", "").split("_"))
+            )
+            if outliers:
+                anomalies.append({
+                    "check": "name_token",
+                    "token": tok,
+                    "present_in": count,
+                    "outliers": outliers,
+                })
+
+        # 3. Label-token consistency
+        lbl_tok_counts: Counter = Counter()
+        for i in member_items:
+            for tok in {t.lower() for t in i.get("label", "").split() if len(t) > 1}:
+                lbl_tok_counts[tok] += 1
+
+        for tok, count in lbl_tok_counts.items():
+            if count / n < _CONSISTENCY_THRESHOLD:
+                continue
+            outliers = sorted(
+                i["name"] for i in member_items
+                if tok not in {t.lower() for t in i.get("label", "").split() if len(t) > 1}
+            )
+            if outliers:
+                anomalies.append({
+                    "check": "label_token",
+                    "token": tok,
+                    "present_in": count,
+                    "outliers": outliers,
+                })
+
+        if not anomalies:
+            continue
+
+        group_item = by_name.get(group_name)
+        findings.append({
+            "group": group_name,
+            "group_label": group_item.get("label", "") if group_item else "",
+            "member_count": n,
+            "anomalies": anomalies,
+        })
+
+    findings.sort(key=lambda x: -sum(len(a["outliers"]) for a in x["anomalies"]))
+    return {
+        "description": (
+            f"Within-group consistency check (threshold ≥{int(_CONSISTENCY_THRESHOLD*100)}%). "
+            "For each group, dominant patterns for item type, name tokens, and label tokens are derived. "
+            "Members that deviate from a majority pattern are flagged as potential misplacements or naming inconsistencies."
+        ),
+        "groups_analysed": len(findings),
+        "findings": findings,
+    }
+
+
 # ── public entry point ───────────────────────────────────────────────────────
 
 def analyze_model_health(inventory: AdminInventory) -> Dict[str, Any]:
@@ -348,4 +449,5 @@ def analyze_model_health(inventory: AdminInventory) -> Dict[str, Any]:
         "item_count": inventory.size,
         "group_membership_anomalies": _group_anomalies(inventory),
         "equipment_completeness": _equipment_completeness(inventory),
+        "group_consistency": _group_consistency(inventory),
     }
