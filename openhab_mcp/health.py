@@ -41,6 +41,8 @@ def _features(item: dict, thing_uids: Set[str] = frozenset()) -> Set[str]:
     itype = item.get("type", "")
     if itype:
         out.add(f"type:{itype}")
+        if ":" in itype:
+            out.add(f"dim:{itype.split(':', 1)[1]}")
 
     for g in item.get("groupNames", []):
         out.add(f"grp:{g}")
@@ -63,6 +65,10 @@ def _features(item: dict, thing_uids: Set[str] = frozenset()) -> Set[str]:
     for tok in item.get("name", "").split("_"):
         if len(tok) > 2:
             out.add(f"tok:{tok}")
+
+    for tok in item.get("label", "").split():
+        if len(tok) > 1:
+            out.add(f"lbl:{tok.lower()}")
 
     return out
 
@@ -117,8 +123,8 @@ def _score(item_features: Set[str], profile: Dict[str, float]) -> Tuple[float, f
 
     total_score = sum(w for _, w in matched) / total
 
-    structural_matched = [(f, w) for f, w in matched if not f.startswith("tok:")]
-    structural_total = sum(w for f, w in profile.items() if not f.startswith("tok:"))
+    structural_matched = [(f, w) for f, w in matched if not f.startswith(("tok:", "lbl:"))]
+    structural_total = sum(w for f, w in profile.items() if not f.startswith(("tok:", "lbl:")))
     structural_score = (
         sum(w for _, w in structural_matched) / structural_total
         if structural_total > 0 else 0.0
