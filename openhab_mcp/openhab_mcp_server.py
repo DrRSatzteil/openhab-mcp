@@ -43,6 +43,7 @@ from openhab_mcp.rename import rename_item as _rename_item
 from openhab_mcp.batch import update_items as _update_items
 from openhab_mcp.logs import read_log as _read_log
 from openhab_mcp.blueprint import get_thing_context as _get_thing_context
+from openhab_mcp.health import analyze_model_health as _analyze_model_health
 from urllib.parse import quote as _url_quote
 
 # Load environment variables from .env file
@@ -1678,6 +1679,33 @@ def replace_thing(
         "errors": errors,
         "status": "ok" if not errors else "partial",
     }
+
+
+@mcp.tool()
+def analyze_model_health() -> Dict[str, Any]:
+    """Statistical health analysis of the openHAB item model. No configuration needed.
+
+    Runs two analyses automatically derived from the current inventory:
+
+    1. group_membership_anomalies
+       Builds a statistical profile for each collection group (item type, name tokens,
+       semantic class, co-group memberships, metadata namespaces). Items not in the group
+       that closely match the profile are flagged as candidates.
+       Score ∈ [0,1]: how well the item matches the average group member.
+
+    2. equipment_completeness
+       For each semantic Equipment type (Window, MultiSensor, RollerShutter, …),
+       derives the set of semantic points present in ≥60% of instances.
+       Equipment groups missing expected points are reported as incomplete.
+
+    Use cases:
+      - Find items accidentally left out of aggregation groups
+      - Detect equipment with missing sensors/controls compared to similar equipment
+      - Identify structural inconsistencies across rooms
+
+    Requires refresh_inventory to have been called first.
+    """
+    return _analyze_model_health(admin_inventory)
 
 
 def run_server():
