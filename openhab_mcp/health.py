@@ -34,7 +34,11 @@ _MIN_EQUIPMENT_INSTANCES = 2   # need at least this many to derive a pattern
 
 # ── feature extraction ───────────────────────────────────────────────────────
 
-def _features(item: dict, thing_uids: Set[str] = frozenset()) -> Set[str]:
+def _features(
+    item: dict,
+    thing_uids: Set[str] = frozenset(),
+    location_types: Set[str] = frozenset(),
+) -> Set[str]:
     """Return the feature set for one item."""
     out: Set[str] = set()
 
@@ -61,6 +65,9 @@ def _features(item: dict, thing_uids: Set[str] = frozenset()) -> Set[str]:
 
     for uid in thing_uids:
         out.add(f"thing:{uid}")
+
+    for loc in location_types:
+        out.add(f"loc:{loc}")
 
     for tok in item.get("name", "").split("_"):
         if len(tok) > 2:
@@ -139,8 +146,35 @@ def _group_anomalies(inventory: AdminInventory) -> Dict[str, Any]:
     all_items = inventory.all_items()
     by_name = {i["name"]: i for i in all_items}
 
-    # Pre-build item → thing UIDs map (empty set when inventory has no links yet)
+    # Pre-build per-item feature context (thing UIDs + direct location)
     item_things = {i["name"]: inventory.get_thing_uids(i["name"]) for i in all_items}
+
+    # Direct location: walk 1-2 levels up from item to find the Location group ancestor.
+    # Using transitive location index gives too many hierarchy levels (Floor, Building, …)
+    # and causes cross-room false positives between rooms on the same floor.
+    def _direct_locs(item: dict) -> Set[str]:
+        locs: Set[str] = set()
+        for parent_name in item.get("groupNames", []):
+            parent = inventory.get_item(parent_name)
+            if not parent:
+                continue
+            sem = parent.get("metadata", {}).get("semantics", {}).get("value", "")
+            if sem.startswith("Location_"):
+                locs.add(sem.removeprefix("Location_"))
+                continue
+            for gp_name in parent.get("groupNames", []):
+                gp = inventory.get_item(gp_name)
+                if gp:
+                    gp_sem = gp.get("metadata", {}).get("semantics", {}).get("value", "")
+                    if gp_sem.startswith("Location_"):
+                        locs.add(gp_sem.removeprefix("Location_"))
+        return locs
+
+    item_locs = {i["name"]: _direct_locs(i) for i in all_items}
+
+    def feat(item: dict) -> Set[str]:
+        n = item["name"]
+        return _features(item, item_things.get(n, frozenset()), item_locs.get(n, frozenset()))
 
     # First pass: build raw TF profiles for all qualifying groups
     eligible: Dict[str, Set[str]] = {}  # group → member names
@@ -151,7 +185,7 @@ def _group_anomalies(inventory: AdminInventory) -> Dict[str, Any]:
         if len(members) < _MIN_GROUP_MEMBERS:
             continue
         member_items = [by_name[n] for n in members if n in by_name]
-        profile = _build_profile([_features(i, item_things.get(i["name"], frozenset())) for i in member_items])
+        profile = _build_profile([feat(i) for i in member_items])
         eligible[group_name] = members
         raw_profiles[group_name] = profile
 
@@ -172,7 +206,7 @@ def _group_anomalies(inventory: AdminInventory) -> Dict[str, Any]:
             name = item["name"]
             if name in members:
                 continue
-            score, struct_score, top_feats = _score(_features(item, item_things.get(name, frozenset())), profile)
+            score, struct_score, top_feats = _score(feat(item), profile)
             if score >= _MIN_SCORE and struct_score >= 0.15:
                 candidates.append({
                     "item": name,

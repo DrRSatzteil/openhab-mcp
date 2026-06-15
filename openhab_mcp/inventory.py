@@ -44,6 +44,7 @@ class AdminInventory:
         self._has_semantic: Set[str] = set()  # items with any semantics metadata
         self._editable: Set[str] = set()  # items editable via REST API
         self._link_index: Dict[str, Set[str]] = defaultdict(set)  # item → thing UIDs
+        self._item_locations: Dict[str, Set[str]] = defaultdict(set)  # item → location types
 
         self._lock = RLock()
 
@@ -164,6 +165,12 @@ class AdminInventory:
                     for prefix in prefixes:
                         equipment_idx[prefix].add(member)
 
+        # Build reverse location index: item → set of location types it belongs to
+        item_locations: Dict[str, Set[str]] = defaultdict(set)
+        for loc_type, members in location_idx.items():
+            for member in members:
+                item_locations[member].add(loc_type)
+
         with self._lock:
             self._items = items
             self._location_index = location_idx
@@ -178,6 +185,7 @@ class AdminInventory:
             self._metadata_ns_index = metadata_ns_idx
             self._has_semantic = has_semantic
             self._editable = editable
+            self._item_locations = item_locations
 
     # ------------------------------------------------------------------
     # Query
@@ -323,6 +331,11 @@ class AdminInventory:
                 name for name, item in self._items.items()
                 if not item.get("type", "").startswith("Group") and not item.get("groupNames")
             )
+
+    def get_location_types(self, item_name: str) -> Set[str]:
+        """Return all location types (hierarchy prefixes) this item belongs to."""
+        with self._lock:
+            return self._item_locations.get(item_name, set()).copy()
 
     def build_links(self, raw_links: List[Dict[str, Any]]) -> None:
         """Index channel links: item → set of thing UIDs.
