@@ -33,7 +33,7 @@ _RARITY_MAX_COUNT = 1          # points present in ≤ this many instances are "
 _MIN_EQUIPMENT_INSTANCES = 2   # need at least this many to derive a pattern
 _CONSISTENCY_THRESHOLD = 0.75  # fraction of group members that must share a pattern for it to be "expected"
 _LOO_MIN_MEMBERS = 5           # minimum group size for leave-one-out analysis
-_LOO_STD_FACTOR = 1.5          # flag members whose LOO score is this many std-devs below group mean
+_LOO_STD_FACTOR = 2.0          # flag members whose LOO score is this many std-devs below group mean
 
 
 # ── feature extraction ───────────────────────────────────────────────────────
