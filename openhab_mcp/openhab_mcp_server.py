@@ -36,7 +36,7 @@ from openhab_mcp.diagnose import diagnose_item as _diagnose_item
 from openhab_mcp.rename import rename_item as _rename_item
 from openhab_mcp.batch import update_items as _update_items
 from openhab_mcp.logs import read_log as _read_log
-from openhab_mcp.blueprint import get_thing_context as _get_thing_context
+from openhab_mcp.thing_context import get_thing_context as _get_thing_context
 from openhab_mcp.health import analyze_model_health as _analyze_model_health
 from urllib.parse import quote as _url_quote
 
