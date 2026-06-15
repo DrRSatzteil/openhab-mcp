@@ -32,6 +32,8 @@ _COMPLETENESS_THRESHOLD = 0.6  # fraction of equipment that must have a point fo
 _RARITY_MAX_COUNT = 1          # points present in ≤ this many instances are "rare"
 _MIN_EQUIPMENT_INSTANCES = 2   # need at least this many to derive a pattern
 _CONSISTENCY_THRESHOLD = 0.75  # fraction of group members that must share a pattern for it to be "expected"
+_LOO_MIN_MEMBERS = 5           # minimum group size for leave-one-out analysis
+_LOO_STD_FACTOR = 1.5          # flag members whose LOO score is this many std-devs below group mean
 
 
 # ── feature extraction ───────────────────────────────────────────────────────
@@ -142,18 +144,19 @@ def _score(item_features: Set[str], profile: Dict[str, float]) -> Tuple[float, f
     return total_score, structural_score, [f for f, _ in matched[:6]]
 
 
-# ── analysis 1: group membership anomalies ──────────────────────────────────
+# ── shared context helpers ───────────────────────────────────────────────────
 
-def _group_anomalies(inventory: AdminInventory) -> Dict[str, Any]:
-    all_items = inventory.all_items()
-    by_name = {i["name"]: i for i in all_items}
+def _build_item_context(
+    all_items: List[dict], inventory: AdminInventory
+) -> Tuple[Dict[str, Set[str]], Dict[str, Set[str]]]:
+    """Return (item_things, item_locs) maps for all items.
 
-    # Pre-build per-item feature context (thing UIDs + direct location)
+    item_things: item name → set of linked thing UIDs
+    item_locs:   item name → set of direct Location types (max 2 levels up,
+                 avoiding transitive floor/building-level cross-contamination)
+    """
     item_things = {i["name"]: inventory.get_thing_uids(i["name"]) for i in all_items}
 
-    # Direct location: walk 1-2 levels up from item to find the Location group ancestor.
-    # Using transitive location index gives too many hierarchy levels (Floor, Building, …)
-    # and causes cross-room false positives between rooms on the same floor.
     def _direct_locs(item: dict) -> Set[str]:
         locs: Set[str] = set()
         for parent_name in item.get("groupNames", []):
@@ -173,10 +176,27 @@ def _group_anomalies(inventory: AdminInventory) -> Dict[str, Any]:
         return locs
 
     item_locs = {i["name"]: _direct_locs(i) for i in all_items}
+    return item_things, item_locs
 
+
+def _make_feat_fn(
+    item_things: Dict[str, Set[str]], item_locs: Dict[str, Set[str]]
+):
+    """Return a feature-extraction closure bound to pre-built context maps."""
     def feat(item: dict) -> Set[str]:
         n = item["name"]
         return _features(item, item_things.get(n, frozenset()), item_locs.get(n, frozenset()))
+    return feat
+
+
+# ── analysis 1: group membership anomalies ──────────────────────────────────
+
+def _group_anomalies(inventory: AdminInventory) -> Dict[str, Any]:
+    all_items = inventory.all_items()
+    by_name = {i["name"]: i for i in all_items}
+
+    item_things, item_locs = _build_item_context(all_items, inventory)
+    feat = _make_feat_fn(item_things, item_locs)
 
     # First pass: build raw TF profiles for all qualifying groups
     eligible: Dict[str, Set[str]] = {}  # group → member names
@@ -441,6 +461,91 @@ def _group_consistency(inventory: AdminInventory) -> Dict[str, Any]:
     }
 
 
+# ── analysis 4: leave-one-out member outliers ───────────────────────────────
+
+def _group_member_outliers(inventory: AdminInventory) -> Dict[str, Any]:
+    """Find existing group members that don't fit their group's profile.
+
+    For each member M in a qualifying group, builds a TF profile from the
+    remaining N-1 members and scores M against it. Members whose score is
+    more than _LOO_STD_FACTOR standard deviations below the group mean are
+    flagged as potential misplacements.
+    """
+    all_items = inventory.all_items()
+    by_name = {i["name"]: i for i in all_items}
+
+    item_things, item_locs = _build_item_context(all_items, inventory)
+    feat = _make_feat_fn(item_things, item_locs)
+
+    findings = []
+
+    for group_name in inventory.get_available_groups():
+        members = inventory.get_direct_members(group_name)
+        if len(members) < _LOO_MIN_MEMBERS:
+            continue
+
+        member_items = [by_name[n] for n in members if n in by_name]
+        n = len(member_items)
+        if n < _LOO_MIN_MEMBERS:
+            continue
+
+        feature_sets = [feat(i) for i in member_items]
+
+        # Compute LOO score for each member
+        loo_results = []
+        for idx, item in enumerate(member_items):
+            others = [fs for j, fs in enumerate(feature_sets) if j != idx]
+            profile = _build_profile(others)
+            total_score, _, top_feats = _score(feature_sets[idx], profile)
+            loo_results.append((item, total_score, top_feats))
+
+        scores = [s for _, s, _ in loo_results]
+        mean = sum(scores) / n
+        variance = sum((s - mean) ** 2 for s in scores) / (n - 1)
+        std = math.sqrt(variance) if variance > 0 else 0.0
+
+        if std == 0:
+            continue
+
+        outliers = []
+        for item, score, top_feats in loo_results:
+            z = (score - mean) / std
+            if z < -_LOO_STD_FACTOR:
+                outliers.append({
+                    "item": item["name"],
+                    "label": item.get("label", ""),
+                    "loo_score": round(score, 3),
+                    "group_mean": round(mean, 3),
+                    "z_score": round(z, 2),
+                    "matching_features": top_feats,
+                })
+
+        if not outliers:
+            continue
+
+        outliers.sort(key=lambda x: x["z_score"])
+        group_item = by_name.get(group_name)
+        findings.append({
+            "group": group_name,
+            "group_label": group_item.get("label", "") if group_item else "",
+            "member_count": n,
+            "mean_score": round(mean, 3),
+            "outliers": outliers,
+        })
+
+    findings.sort(key=lambda x: -len(x["outliers"]))
+    return {
+        "description": (
+            f"Members that don't fit their own group's profile (leave-one-out scoring). "
+            f"For each member, a TF profile is built from the other N-1 members. "
+            f"Members scoring ≥{_LOO_STD_FACTOR} standard deviations below the group mean "
+            "are flagged as potential misplacements."
+        ),
+        "groups_analysed": len(findings),
+        "findings": findings,
+    }
+
+
 # ── public entry point ───────────────────────────────────────────────────────
 
 def analyze_model_health(inventory: AdminInventory) -> Dict[str, Any]:
@@ -456,4 +561,5 @@ def analyze_model_health(inventory: AdminInventory) -> Dict[str, Any]:
         "group_membership_anomalies": _group_anomalies(inventory),
         "equipment_completeness": _equipment_completeness(inventory),
         "group_consistency": _group_consistency(inventory),
+        "group_member_outliers": _group_member_outliers(inventory),
     }
