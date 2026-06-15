@@ -43,6 +43,7 @@ class AdminInventory:
         self._metadata_ns_index: Dict[str, Set[str]] = defaultdict(set)  # namespace → items
         self._has_semantic: Set[str] = set()  # items with any semantics metadata
         self._editable: Set[str] = set()  # items editable via REST API
+        self._link_index: Dict[str, Set[str]] = defaultdict(set)  # item → thing UIDs
 
         self._lock = RLock()
 
@@ -322,6 +323,27 @@ class AdminInventory:
                 name for name, item in self._items.items()
                 if not item.get("type", "").startswith("Group") and not item.get("groupNames")
             )
+
+    def build_links(self, raw_links: List[Dict[str, Any]]) -> None:
+        """Index channel links: item → set of thing UIDs.
+
+        thing UID is extracted from channelUID by dropping the last ':'-segment.
+        E.g. 'zwave:device:ctrl:node5:switch_binary' → 'zwave:device:ctrl:node5'
+        """
+        link_idx: Dict[str, Set[str]] = defaultdict(set)
+        for link in raw_links:
+            item_name = link.get("itemName", "")
+            channel_uid = link.get("channelUID", "")
+            if item_name and ":" in channel_uid:
+                thing_uid = channel_uid.rsplit(":", 1)[0]
+                link_idx[item_name].add(thing_uid)
+        with self._lock:
+            self._link_index = link_idx
+
+    def get_thing_uids(self, item_name: str) -> Set[str]:
+        """Return the thing UIDs of all channels linked to this item."""
+        with self._lock:
+            return self._link_index.get(item_name, set()).copy()
 
     @property
     def size(self) -> int:

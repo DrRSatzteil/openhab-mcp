@@ -1911,6 +1911,12 @@ class OpenHABClient:
         response.raise_for_status()
         return response.json()
 
+    def get_all_links_raw(self) -> List[Dict[str, Any]]:
+        """Fetch all channel links (for inventory indexing)."""
+        response = self.session.get(f"{self.base_url}/rest/links")
+        response.raise_for_status()
+        return response.json()
+
     def get_item_links_raw(self, item_name: str) -> List[Dict[str, Any]]:
         """Fetch all channel links for a specific item (unpaginated)."""
         response = self.session.get(

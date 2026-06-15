@@ -1141,6 +1141,7 @@ def refresh_inventory() -> Dict[str, Any]:
     """
     raw = openhab_client.get_all_items_raw()
     admin_inventory.build(raw)
+    admin_inventory.build_links(openhab_client.get_all_links_raw())
     return {
         "success": True,
         "item_count": admin_inventory.size,
