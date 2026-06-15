@@ -38,7 +38,6 @@ from openhab_mcp.batch import update_items as _update_items
 from openhab_mcp.logs import read_log as _read_log
 from openhab_mcp.thing_context import get_thing_context as _get_thing_context
 from openhab_mcp.health import analyze_model_health as _analyze_model_health
-from urllib.parse import quote as _url_quote
 
 # Load environment variables from .env file
 env_file = Path(".env")
@@ -1547,16 +1546,11 @@ def replace_thing(
 
     for step in plan:
         try:
-            openhab_client.session.put(
-                f"{openhab_client.base_url}/rest/links"
-                f"/{_url_quote(step['item_name'], safe='')}"
-                f"/{step['new_channel_uid'].replace('#', '%23')}",
-                json={
-                    "itemName": step["item_name"],
-                    "channelUID": step["new_channel_uid"],
-                    "configuration": step["configuration"],
-                },
-            ).raise_for_status()
+            openhab_client.create_or_update_link(Link(
+                itemName=step["item_name"],
+                channelUID=step["new_channel_uid"],
+                configuration=step["configuration"],
+            ))
             created.append({"item": step["item_name"], "channel": step["new_channel_uid"]})
         except Exception as e:
             errors.append({"item": step["item_name"], "channel": step["new_channel_uid"], "error": str(e)})
@@ -1569,11 +1563,7 @@ def replace_thing(
             if lnk["itemName"] not in created_items:
                 continue  # skip if new link failed
             try:
-                openhab_client.session.delete(
-                    f"{openhab_client.base_url}/rest/links"
-                    f"/{_url_quote(lnk['itemName'], safe='')}"
-                    f"/{lnk['channelUID'].replace('#', '%23')}",
-                ).raise_for_status()
+                openhab_client.delete_link(lnk["itemName"], lnk["channelUID"])
                 deleted_links.append(lnk["itemName"])
             except Exception as e:
                 errors.append({"delete_link": lnk["itemName"], "error": str(e)})
@@ -1582,9 +1572,7 @@ def replace_thing(
     thing_deleted = False
     if delete_old_thing and not errors:
         try:
-            openhab_client.session.delete(
-                f"{openhab_client.base_url}/rest/things/{_url_quote(old_thing_uid, safe='')}",
-            ).raise_for_status()
+            openhab_client.delete_thing(old_thing_uid)
             thing_deleted = True
         except Exception as e:
             errors.append({"delete_thing": old_thing_uid, "error": str(e)})
