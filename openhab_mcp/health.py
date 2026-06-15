@@ -29,6 +29,7 @@ _MIN_SCORE = 0.30           # minimum match score to report a candidate
 _MAX_CANDIDATES = 8         # max candidates per group
 _MAX_GROUPS = 25            # max groups in anomaly report (highest-candidate first)
 _COMPLETENESS_THRESHOLD = 0.6  # fraction of equipment that must have a point for it to be "expected"
+_RARITY_MAX_COUNT = 1          # points present in ≤ this many instances are "rare"
 _MIN_EQUIPMENT_INSTANCES = 2   # need at least this many to derive a pattern
 
 
@@ -282,36 +283,51 @@ def _equipment_completeness(inventory: AdminInventory) -> Dict[str, Any]:
 
         n = len(profiles)
         all_points: Set[str] = set().union(*profiles)
-        expected = {
-            p for p in all_points
-            if sum(1 for prof in profiles if p in prof) / n >= _COMPLETENESS_THRESHOLD
-        }
+        point_counts = {p: sum(1 for prof in profiles if p in prof) for p in all_points}
 
-        if not expected:
+        expected = {p for p, c in point_counts.items() if c / n >= _COMPLETENESS_THRESHOLD}
+        rare = {p for p, c in point_counts.items() if 0 < c <= _RARITY_MAX_COUNT}
+
+        if not expected and not rare:
             continue
 
         incomplete = []
-        for eq, profile in zip(eq_items, profiles):
-            missing = expected - profile
-            if missing:
-                incomplete.append({
-                    "equipment": eq["name"],
-                    "label": eq.get("label", ""),
-                    "missing_points": sorted(missing),
-                })
+        if expected:
+            for eq, profile in zip(eq_items, profiles):
+                missing = expected - profile
+                if missing:
+                    incomplete.append({
+                        "equipment": eq["name"],
+                        "label": eq.get("label", ""),
+                        "missing_points": sorted(missing),
+                    })
 
-        if incomplete:
-            findings.append({
+        rare_points = []
+        for point in sorted(rare):
+            owners = [
+                {"equipment": eq["name"], "label": eq.get("label", "")}
+                for eq, profile in zip(eq_items, profiles) if point in profile
+            ]
+            rare_points.append({"point": point, "only_in": owners})
+
+        if incomplete or rare_points:
+            finding: Dict[str, Any] = {
                 "equipment_type": eq_type,
                 "instance_count": n,
-                "expected_points": sorted(expected),
-                "incomplete": sorted(incomplete, key=lambda x: -len(x["missing_points"])),
-            })
+            }
+            if expected:
+                finding["expected_points"] = sorted(expected)
+            if incomplete:
+                finding["incomplete"] = sorted(incomplete, key=lambda x: -len(x["missing_points"]))
+            if rare_points:
+                finding["rare_points"] = rare_points
+            findings.append(finding)
 
     return {
         "description": (
             f"Equipment groups missing semantic points present in ≥{int(_COMPLETENESS_THRESHOLD*100)}% "
-            "of same-type equipment."
+            f"of same-type equipment (incomplete), or having points present in ≤{_RARITY_MAX_COUNT} "
+            "instance (rare — potential template or inconsistency)."
         ),
         "equipment_types_affected": len(findings),
         "findings": findings,
