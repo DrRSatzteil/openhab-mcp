@@ -38,6 +38,7 @@ from openhab_mcp.batch import update_items as _update_items
 from openhab_mcp.logs import read_log as _read_log
 from openhab_mcp.thing_context import get_thing_context as _get_thing_context
 from openhab_mcp.health import analyze_model_health as _analyze_model_health
+from openhab_mcp import suppressions as _suppressions
 
 # Load environment variables from .env file
 env_file = Path(".env")
@@ -1623,8 +1624,58 @@ def analyze_model_health() -> Dict[str, Any]:
     return _analyze_model_health(admin_inventory)
 
 
+@mcp.tool()
+def list_health_suppressions() -> List[Dict[str, Any]]:
+    """List all active health analysis suppressions.
+
+    Returns all (analysis, item, characteristic) triples that are currently
+    suppressed, along with their optional reason.
+    """
+    return _suppressions.list_all()
+
+
+@mcp.tool()
+def save_health_suppression(
+    analysis: str = Field(
+        ...,
+        description="Analysis name: 'group_member_outliers', 'group_consistency', "
+                    "'group_membership_anomalies', or 'equipment_completeness'",
+    ),
+    item: str = Field(..., description="Item name to suppress"),
+    characteristic: str = Field(
+        ...,
+        description="Second dimension depending on analysis: group name for "
+                    "group_member_outliers / group_consistency / group_membership_anomalies; "
+                    "missing point type (e.g. 'Point_Measurement_Temperature') for equipment_completeness",
+    ),
+    reason: str = Field("", description="Optional explanation why this finding is a known false positive"),
+) -> Dict[str, Any]:
+    """Suppress a known false positive in the health analysis.
+
+    The triple (analysis, item, characteristic) will be silently skipped in all
+    future analyze_model_health runs. Use list_health_suppressions to review
+    active suppressions and delete_health_suppression to remove one.
+    """
+    return _suppressions.add(analysis, item, characteristic, reason)
+
+
+@mcp.tool()
+def delete_health_suppression(
+    analysis: str = Field(..., description="Analysis name of the suppression to remove"),
+    item: str = Field(..., description="Item name of the suppression to remove"),
+    characteristic: str = Field(..., description="Characteristic of the suppression to remove"),
+) -> Dict[str, Any]:
+    """Remove an active health analysis suppression.
+
+    After removal the finding will appear again in the next analyze_model_health run.
+    """
+    removed = _suppressions.remove(analysis, item, characteristic)
+    return {"removed": removed, "analysis": analysis, "item": item, "characteristic": characteristic}
+
+
 def run_server():
     """Run the MCP server with the configured transport."""
+    _suppressions.load()
     mcp.run(transport=OPENHAB_MCP_TRANSPORT)
 
 if __name__ == "__main__":

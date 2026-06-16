@@ -23,6 +23,7 @@ from collections import Counter, defaultdict
 from typing import Any, Dict, List, Set, Tuple
 
 from .inventory import AdminInventory
+from . import suppressions
 
 # ── tunables ────────────────────────────────────────────────────────────────
 _MIN_GROUP_MEMBERS = 3      # groups smaller than this are skipped
@@ -247,6 +248,10 @@ def _group_anomalies(inventory: AdminInventory) -> Dict[str, Any]:
                     "matching_features": top_feats,
                 })
 
+        candidates = [
+            c for c in candidates
+            if not suppressions.is_suppressed("group_membership_anomalies", c["item"], group_name)
+        ]
         if not candidates:
             continue
 
@@ -324,7 +329,10 @@ def _equipment_completeness(inventory: AdminInventory) -> Dict[str, Any]:
         incomplete = []
         if expected:
             for eq, profile in zip(eq_items, profiles):
-                missing = expected - profile
+                missing = {
+                    p for p in (expected - profile)
+                    if not suppressions.is_suppressed("equipment_completeness", eq["name"], p)
+                }
                 if missing:
                     incomplete.append({
                         "equipment": eq["name"],
@@ -395,7 +403,11 @@ def _group_consistency(inventory: AdminInventory) -> Dict[str, Any]:
             for itype, count in type_counts.items():
                 if not itype or count / n_c < _CONSISTENCY_THRESHOLD:
                     continue
-                outliers = sorted(i["name"] for i in concrete if i.get("type", "") != itype)
+                outliers = sorted(
+                    i["name"] for i in concrete
+                    if i.get("type", "") != itype
+                    and not suppressions.is_suppressed("group_consistency", i["name"], group_name)
+                )
                 if outliers:
                     anomalies.append({
                         "check": "type",
@@ -417,6 +429,7 @@ def _group_consistency(inventory: AdminInventory) -> Dict[str, Any]:
             outliers = sorted(
                 i["name"] for i in member_items
                 if tok not in set(_name_tokens(i.get("name", "")))
+                and not suppressions.is_suppressed("group_consistency", i["name"], group_name)
             )
             if outliers:
                 anomalies.append({
@@ -438,6 +451,7 @@ def _group_consistency(inventory: AdminInventory) -> Dict[str, Any]:
             outliers = sorted(
                 i["name"] for i in member_items
                 if tok not in {t.lower() for t in i.get("label", "").split() if len(t) > 1}
+                and not suppressions.is_suppressed("group_consistency", i["name"], group_name)
             )
             if outliers:
                 anomalies.append({
@@ -519,7 +533,9 @@ def _group_member_outliers(inventory: AdminInventory) -> Dict[str, Any]:
         outliers = []
         for item, score, top_feats in loo_results:
             z = (score - mean) / std
-            if z < -_LOO_STD_FACTOR:
+            if z < -_LOO_STD_FACTOR and not suppressions.is_suppressed(
+                "group_member_outliers", item["name"], group_name
+            ):
                 outliers.append({
                     "item": item["name"],
                     "label": item.get("label", ""),
