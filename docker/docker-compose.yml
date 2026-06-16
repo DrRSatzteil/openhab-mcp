@@ -9,11 +9,14 @@ services:
     restart: unless-stopped
     ports:
       - "8081:8000"
-    # Environment variables are loaded from .env file in the docker directory
     env_file:
       - .env
     environment:
       - PYTHONUNBUFFERED=1
+      - HEALTH_SUPPRESSIONS_PATH=/app/data/health_suppressions.json
+    volumes:
+      - ./data:/app/data                              # health suppressions and other persistent data
+      - /opt/openhab/userdata/logs:/app/logs:ro       # openHAB log directory for manage_logs
     networks:
       - openhab-network
 
