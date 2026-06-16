@@ -1641,7 +1641,9 @@ def save_health_suppression(
         description="Analysis name: 'group_member_outliers', 'group_consistency', "
                     "'group_membership_anomalies', or 'equipment_completeness'",
     ),
-    item: str = Field(..., description="Item name to suppress"),
+    item: Union[str, List[str]] = Field(
+        ..., description="Item name to suppress, or a list of item names to suppress in one call"
+    ),
     characteristic: str = Field(
         ...,
         description="Second dimension depending on analysis: group name for "
@@ -1649,26 +1651,38 @@ def save_health_suppression(
                     "missing point type (e.g. 'Point_Measurement_Temperature') for equipment_completeness",
     ),
     reason: str = Field("", description="Optional explanation why this finding is a known false positive"),
-) -> Dict[str, Any]:
+) -> Union[Dict[str, Any], List[Dict[str, Any]]]:
     """Suppress a known false positive in the health analysis.
 
     The triple (analysis, item, characteristic) will be silently skipped in all
-    future analyze_model_health runs. Use list_health_suppressions to review
-    active suppressions and delete_health_suppression to remove one.
+    future analyze_model_health runs. Pass a list of item names to suppress the
+    same characteristic for several items at once (e.g. a recurring pattern across
+    many groups). Use list_health_suppressions to review active suppressions and
+    delete_health_suppression to remove one.
     """
+    if isinstance(item, list):
+        return [_suppressions.add(analysis, i, characteristic, reason) for i in item]
     return _suppressions.add(analysis, item, characteristic, reason)
 
 
 @mcp.tool()
 def delete_health_suppression(
     analysis: str = Field(..., description="Analysis name of the suppression to remove"),
-    item: str = Field(..., description="Item name of the suppression to remove"),
+    item: Union[str, List[str]] = Field(
+        ..., description="Item name to remove, or a list of item names to remove in one call"
+    ),
     characteristic: str = Field(..., description="Characteristic of the suppression to remove"),
-) -> Dict[str, Any]:
+) -> Union[Dict[str, Any], List[Dict[str, Any]]]:
     """Remove an active health analysis suppression.
 
     After removal the finding will appear again in the next analyze_model_health run.
     """
+    if isinstance(item, list):
+        return [
+            {"removed": _suppressions.remove(analysis, i, characteristic), "analysis": analysis,
+             "item": i, "characteristic": characteristic}
+            for i in item
+        ]
     removed = _suppressions.remove(analysis, item, characteristic)
     return {"removed": removed, "analysis": analysis, "item": item, "characteristic": characteristic}
 
