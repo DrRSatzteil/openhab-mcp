@@ -15,7 +15,7 @@ services:
       - PYTHONUNBUFFERED=1
       - HEALTH_SUPPRESSIONS_PATH=/app/data/health_suppressions.json
     healthcheck:
-      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/localhost/8000 && exit 0 || exit 1"]
+      test: ["CMD", "python3", "-c", "import urllib.request, json; req = urllib.request.Request('http://localhost:8000/mcp', data=json.dumps({'jsonrpc':'2.0','method':'ping','id':1}).encode(), headers={'Content-Type': 'application/json', 'Accept': 'application/json, text/event-stream'}); urllib.request.urlopen(req, timeout=5)"]
       interval: 30s
       timeout: 10s
       retries: 3
