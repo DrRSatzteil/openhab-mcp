@@ -1634,6 +1634,27 @@ def list_health_suppressions() -> List[Dict[str, Any]]:
     return _suppressions.list_all()
 
 
+def _zip_items_characteristics(item: Union[str, List[str]], characteristic: Union[str, List[str]]):
+    """Pair up item(s) and characteristic(s) for batch suppression calls.
+
+    Either side may be a scalar or a list. Two lists are paired positionally
+    (must be the same length); a scalar is broadcast against the other list.
+    """
+    items = item if isinstance(item, list) else [item]
+    chars = characteristic if isinstance(characteristic, list) else [characteristic]
+    if len(items) > 1 and len(chars) > 1:
+        if len(items) != len(chars):
+            raise ValueError(
+                f"item ({len(items)}) and characteristic ({len(chars)}) lists must have the same length"
+            )
+        return list(zip(items, chars))
+    if len(items) == 1:
+        items = items * len(chars)
+    if len(chars) == 1:
+        chars = chars * len(items)
+    return list(zip(items, chars))
+
+
 @mcp.tool()
 def save_health_suppression(
     analysis: str = Field(
@@ -1642,49 +1663,58 @@ def save_health_suppression(
                     "'group_membership_anomalies', or 'equipment_completeness'",
     ),
     item: Union[str, List[str]] = Field(
-        ..., description="Item name to suppress, or a list of item names to suppress in one call"
+        ..., description="Item name to suppress, or a list of item names"
     ),
-    characteristic: str = Field(
+    characteristic: Union[str, List[str]] = Field(
         ...,
         description="Second dimension depending on analysis: group name for "
                     "group_member_outliers / group_consistency / group_membership_anomalies; "
-                    "missing point type (e.g. 'Point_Measurement_Temperature') for equipment_completeness",
+                    "missing point type (e.g. 'Point_Measurement_Temperature') for equipment_completeness. "
+                    "Can also be a list of characteristics paired positionally with a list of items, for "
+                    "suppressing several (item, characteristic) pairs that don't share the same characteristic "
+                    "in one call.",
     ),
     reason: str = Field("", description="Optional explanation why this finding is a known false positive"),
 ) -> Union[Dict[str, Any], List[Dict[str, Any]]]:
     """Suppress a known false positive in the health analysis.
 
     The triple (analysis, item, characteristic) will be silently skipped in all
-    future analyze_model_health runs. Pass a list of item names to suppress the
-    same characteristic for several items at once (e.g. a recurring pattern across
-    many groups). Use list_health_suppressions to review active suppressions and
-    delete_health_suppression to remove one.
+    future analyze_model_health runs. item and characteristic can each be a single
+    value or a list: a list paired with a scalar suppresses several items under the
+    same characteristic; two equal-length lists suppress several distinct
+    (item, characteristic) pairs in one call (e.g. a recurring pattern with a
+    different group per item). Use list_health_suppressions to review active
+    suppressions and delete_health_suppression to remove one.
     """
-    if isinstance(item, list):
-        return [_suppressions.add(analysis, i, characteristic, reason) for i in item]
-    return _suppressions.add(analysis, item, characteristic, reason)
+    pairs = _zip_items_characteristics(item, characteristic)
+    if len(pairs) == 1:
+        i, c = pairs[0]
+        return _suppressions.add(analysis, i, c, reason)
+    return [_suppressions.add(analysis, i, c, reason) for i, c in pairs]
 
 
 @mcp.tool()
 def delete_health_suppression(
     analysis: str = Field(..., description="Analysis name of the suppression to remove"),
     item: Union[str, List[str]] = Field(
-        ..., description="Item name to remove, or a list of item names to remove in one call"
+        ..., description="Item name to remove, or a list of item names"
     ),
-    characteristic: str = Field(..., description="Characteristic of the suppression to remove"),
+    characteristic: Union[str, List[str]] = Field(
+        ...,
+        description="Characteristic of the suppression to remove. Can also be a list of characteristics "
+                    "paired positionally with a list of items, mirroring save_health_suppression.",
+    ),
 ) -> Union[Dict[str, Any], List[Dict[str, Any]]]:
     """Remove an active health analysis suppression.
 
     After removal the finding will appear again in the next analyze_model_health run.
     """
-    if isinstance(item, list):
-        return [
-            {"removed": _suppressions.remove(analysis, i, characteristic), "analysis": analysis,
-             "item": i, "characteristic": characteristic}
-            for i in item
-        ]
-    removed = _suppressions.remove(analysis, item, characteristic)
-    return {"removed": removed, "analysis": analysis, "item": item, "characteristic": characteristic}
+    pairs = _zip_items_characteristics(item, characteristic)
+    results = [
+        {"removed": _suppressions.remove(analysis, i, c), "analysis": analysis, "item": i, "characteristic": c}
+        for i, c in pairs
+    ]
+    return results[0] if len(results) == 1 else results
 
 
 def run_server():
