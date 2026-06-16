@@ -11,6 +11,12 @@ services:
       - PYTHONUNBUFFERED=1
       - TZ=Europe/Berlin  # must match openHAB timezone for manage_logs time filters
       - HEALTH_SUPPRESSIONS_PATH=/app/data/health_suppressions.json
+    healthcheck:
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/localhost/8000 && exit 0 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
     volumes:
       - ./data:/app/data                              # health suppressions and other persistent data
       - /opt/openhab/userdata/logs:/app/logs:ro       # openHAB log directory for manage_logs
