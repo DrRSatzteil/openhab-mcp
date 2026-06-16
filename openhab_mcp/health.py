@@ -18,6 +18,7 @@ No external libraries required — pure Python Counter arithmetic.
 """
 
 import math
+import re
 from collections import Counter, defaultdict
 from typing import Any, Dict, List, Set, Tuple
 
@@ -34,6 +35,14 @@ _MIN_EQUIPMENT_INSTANCES = 2   # need at least this many to derive a pattern
 _CONSISTENCY_THRESHOLD = 0.75  # fraction of group members that must share a pattern for it to be "expected"
 _LOO_MIN_MEMBERS = 5           # minimum group size for leave-one-out analysis
 _LOO_STD_FACTOR = 2.0          # flag members whose LOO score is this many std-devs below group mean
+
+
+# ── helpers ──────────────────────────────────────────────────────────────────
+
+def _name_tokens(name: str) -> List[str]:
+    """Split an item name into lowercase tokens, handling _, -, and camelCase."""
+    name = re.sub(r'([a-z])([A-Z])', r'\1_\2', name)
+    return [t.lower() for t in re.split(r'[_\-]+', name) if t]
 
 
 # ── feature extraction ───────────────────────────────────────────────────────
@@ -73,7 +82,7 @@ def _features(
     for loc in location_types:
         out.add(f"loc:{loc}")
 
-    for tok in item.get("name", "").split("_"):
+    for tok in _name_tokens(item.get("name", "")):
         if len(tok) > 2:
             out.add(f"tok:{tok}")
 
@@ -395,10 +404,10 @@ def _group_consistency(inventory: AdminInventory) -> Dict[str, Any]:
                         "outliers": outliers,
                     })
 
-        # 2. Name-token consistency (tokens from "_"-split names)
+        # 2. Name-token consistency
         name_tok_counts: Counter = Counter()
         for i in member_items:
-            for tok in set(i.get("name", "").split("_")):
+            for tok in set(_name_tokens(i.get("name", ""))):
                 if len(tok) > 2:
                     name_tok_counts[tok] += 1
 
@@ -407,7 +416,7 @@ def _group_consistency(inventory: AdminInventory) -> Dict[str, Any]:
                 continue
             outliers = sorted(
                 i["name"] for i in member_items
-                if tok not in set(i.get("name", "").split("_"))
+                if tok not in set(_name_tokens(i.get("name", "")))
             )
             if outliers:
                 anomalies.append({
