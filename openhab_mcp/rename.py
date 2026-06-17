@@ -287,7 +287,22 @@ def rename_item(
         except Exception as exc:
             errors.append(f"update_ui '{uid}' failed: {exc}")
 
-    # Step E: delete old item (also removes its links)
+    # Step E: remove the old item's links
+    # Deleting an item does NOT cascade-delete its channel links — they're a
+    # separate registry keyed by item name as a plain string, so they survive
+    # as orphaned entries pointing at a now-nonexistent item (visible in the
+    # Developer Sidebar's "orphaned links" health check) unless removed explicitly.
+    for link in channel_links:
+        channel_uid = link["channel_uid"]
+        if not channel_uid:
+            continue
+        try:
+            client.delete_link(old_name, channel_uid)
+            completed.append(f"unlinked '{old_name}' → '{channel_uid}'")
+        except Exception as exc:
+            errors.append(f"delete_link {channel_uid} failed: {exc}")
+
+    # Step F: delete old item
     try:
         client.delete_item(old_name)
         completed.append(f"deleted item '{old_name}'")
