@@ -138,11 +138,25 @@ def rename_item(
 
     referencing_rules = diagnosis["referenced_in_rules"]
     referencing_ui = diagnosis["referenced_in_ui"]
+    referencing_sitemaps = diagnosis.get("referenced_in_sitemaps", [])
     channel_links = diagnosis["channel_links"]
 
     # --- 2. Build plan -----------------------------------------------------
     rule_steps = []
     manual_review = []
+
+    # Classic sitemaps are typically provisioned from .sitemap text files, not
+    # through the managed REST registry like ui:page/ui:widget — there is no
+    # generic API to patch them, so every sitemap reference always needs a
+    # manual edit, regardless of dry_run.
+    for sm in referencing_sitemaps:
+        manual_review.append(
+            {
+                "sitemap_name": sm.get("name"),
+                "sitemap_label": sm.get("label"),
+                "action": f"update the .sitemap file manually — '{old_name}' is referenced as an item ID",
+            }
+        )
 
     for rule_info in referencing_rules:
         uid = rule_info["uid"]
@@ -184,6 +198,7 @@ def rename_item(
         "copy_links": channel_links,
         "update_rules": rule_steps,
         "update_ui": [{"uid": c["uid"], "namespace": c["namespace"]} for c in referencing_ui],
+        "sitemaps_need_manual_update": [sm.get("name") for sm in referencing_sitemaps],
         "delete_old_item": old_name,
     }
 

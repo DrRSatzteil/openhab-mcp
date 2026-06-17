@@ -1962,6 +1962,22 @@ class OpenHABClient:
         response.raise_for_status()
         return response.json()
 
+    def get_sitemaps(self) -> List[Dict[str, Any]]:
+        """List all classic sitemaps (summary only, no widgets)."""
+        response = self.session.get(f"{self.base_url}/rest/sitemaps")
+        if response.status_code == 404:
+            return []
+        response.raise_for_status()
+        return response.json()
+
+    def get_sitemap(self, sitemap_name: str) -> Dict[str, Any]:
+        """Fetch a sitemap's full widget tree, recursively expanded (linked pages included)."""
+        response = self.session.get(f"{self.base_url}/rest/sitemaps/{quote(sitemap_name, safe='')}")
+        if response.status_code == 404:
+            return {}
+        response.raise_for_status()
+        return response.json()
+
     # Helper methods
     def _enhance_tags(self, tags: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         for tag in tags:

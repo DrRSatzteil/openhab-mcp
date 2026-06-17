@@ -74,12 +74,32 @@ def diagnose_item(item_name: str, client: OpenHABClient) -> Dict[str, Any]:
         f_rules = pool.submit(client.get_all_rules_raw)
         f_pages = pool.submit(client.get_ui_components, "ui:page")
         f_widgets = pool.submit(client.get_ui_components, "ui:widget")
+        f_sitemaps = pool.submit(client.get_sitemaps)
 
         item = f_item.result()
         links = f_links.result()
         all_rules = f_rules.result()
         pages = f_pages.result()
         widgets = f_widgets.result()
+        sitemap_summaries = f_sitemaps.result()
+
+    # Classic sitemaps (BasicUI) are a separate subsystem from ui:page/ui:widget —
+    # fetching the full sitemap (not the per-page endpoint) returns the whole
+    # widget tree already expanded (linked pages included), so one request per
+    # sitemap is enough to search it completely.
+    referencing_sitemaps = []
+    if sitemap_summaries:
+        with ThreadPoolExecutor(max_workers=5) as pool:
+            futures = {
+                pool.submit(client.get_sitemap, sm.get("name")): sm for sm in sitemap_summaries
+            }
+            for future in as_completed(futures):
+                sm = futures[future]
+                full_sitemap = future.result()
+                if full_sitemap and _search_json(full_sitemap, item_name):
+                    referencing_sitemaps.append(
+                        {"name": sm.get("name"), "label": sm.get("label")}
+                    )
 
     # Rules referencing this item
     # ref_types only catches the item name double-quoted in structured trigger/
@@ -133,7 +153,7 @@ def diagnose_item(item_name: str, client: OpenHABClient) -> Dict[str, Any]:
 
     # Impact summary
     script_rules = [r for r in referencing_rules if r["script_excerpts"]]
-    blocking = len(links) + len(referencing_rules) + len(referencing_ui)
+    blocking = len(links) + len(referencing_rules) + len(referencing_ui) + len(referencing_sitemaps)
 
     return {
         "item": {
@@ -150,6 +170,7 @@ def diagnose_item(item_name: str, client: OpenHABClient) -> Dict[str, Any]:
         ],
         "referenced_in_rules": referencing_rules,
         "referenced_in_ui": referencing_ui,
+        "referenced_in_sitemaps": referencing_sitemaps,
         "persistence": {
             "configured_services": persistence_namespaces,
         },
@@ -158,6 +179,7 @@ def diagnose_item(item_name: str, client: OpenHABClient) -> Dict[str, Any]:
             "channel_links": len(links),
             "rules": len(referencing_rules),
             "ui_components": len(referencing_ui),
+            "sitemaps": len(referencing_sitemaps),
             "script_rules_need_manual_review": [r["name"] for r in script_rules],
             "safe_to_delete": blocking == 0,
             "rename_auto_updatable": [
