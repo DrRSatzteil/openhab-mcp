@@ -39,6 +39,7 @@ from openhab_mcp.logs import read_log as _read_log
 from openhab_mcp.thing_context import get_thing_context as _get_thing_context
 from openhab_mcp.health import analyze_model_health as _analyze_model_health
 from openhab_mcp import suppressions as _suppressions
+from openhab_mcp.admin_changelog import audit_log, read_entries as _read_admin_changes
 
 # Load environment variables from .env file
 env_file = Path(".env")
@@ -198,6 +199,7 @@ def get_create_item_schema() -> Dict[str, Any]:
 
 
 @mcp.tool()
+@audit_log
 def create_item(
     item: ItemCreate = Field(..., description="Item details to create"),
 ) -> Dict[str, Any]:
@@ -211,6 +213,7 @@ def create_item(
 
 
 @mcp.tool()
+@audit_log
 def delete_item(
     item_name: str = Field(..., description="Name of the item to delete"),
 ) -> bool:
@@ -419,6 +422,7 @@ def get_create_or_update_link_schema() -> Dict[str, Any]:
     return Link.model_json_schema()
 
 @mcp.tool()
+@audit_log
 def create_or_update_link(
     link: Link = Field(..., description="Link to create or update")
 ) -> Dict[str, Any]:
@@ -432,6 +436,7 @@ def create_or_update_link(
 
 
 @mcp.tool()
+@audit_log
 def delete_link(
     item_name: str = Field(..., description="Name of the item to delete link for"),
     channel_uid: str = Field(..., description="UID of the channel to delete link for"),
@@ -526,6 +531,7 @@ def get_update_thing_schema() -> Dict[str, Any]:
 
 
 @mcp.tool()
+@audit_log
 def create_thing(
     thing: ThingCreate = Field(..., description="Thing to create"),
 ) -> Dict[str, Any]:
@@ -539,6 +545,7 @@ def create_thing(
 
 
 @mcp.tool()
+@audit_log
 def update_thing(
     thing: ThingUpdate = Field(..., description="Thing to update"),
 ) -> Dict[str, Any]:
@@ -552,6 +559,7 @@ def update_thing(
 
 
 @mcp.tool()
+@audit_log
 def delete_thing(
     thing_uid: str = Field(..., description="UID of the thing to delete"),
 ) -> bool:
@@ -641,6 +649,7 @@ def get_update_rule_schema() -> dict:
 
 
 @mcp.tool()
+@audit_log
 def create_rule(
     rule: RuleCreate = Field(..., description="Rule to create")
 ) -> Dict[str, Any]:
@@ -654,6 +663,7 @@ def create_rule(
 
 
 @mcp.tool()
+@audit_log
 def update_rule(
     rule_updates: RuleUpdate = Field(
         ..., description="Partial updates to apply to the rule"
@@ -669,6 +679,7 @@ def update_rule(
 
 
 @mcp.tool()
+@audit_log
 def update_rule_script_action(
     rule_uid: str = Field(..., description="UID of the rule to update"),
     action_id: str = Field(..., description="ID of the action to update"),
@@ -690,6 +701,7 @@ def update_rule_script_action(
 
 
 @mcp.tool()
+@audit_log
 def delete_rule(
     rule_uid: str = Field(..., description="UID of the rule to delete")
 ) -> bool:
@@ -716,6 +728,7 @@ def run_rule_now(
 
 
 @mcp.tool()
+@audit_log
 def set_rule_enabled(
     rule_uid: str = Field(..., description="UID of the rule to enable"),
     enabled: bool = Field(
@@ -768,6 +781,7 @@ def get_script(
 
 
 @mcp.tool()
+@audit_log
 def create_script(
     script_id: str = Field(..., description="ID of the script to create"),
     script_type: str = Field(..., description="Type of the script"),
@@ -785,6 +799,7 @@ def create_script(
 
 
 @mcp.tool()
+@audit_log
 def update_script(
     script_id: str = Field(..., description="ID of the script to update"),
     script_type: str = Field(..., description="Type of the script"),
@@ -802,6 +817,7 @@ def update_script(
 
 
 @mcp.tool()
+@audit_log
 def delete_script(
     script_id: str = Field(..., description="ID of the script to delete"),
 ) -> bool:
@@ -862,6 +878,7 @@ def get_create_semantic_tag_schema() -> dict:
 
 
 @mcp.tool()
+@audit_log
 def create_semantic_tag(
     tag: Tag = Field(..., description="Tag to create")
 ) -> Dict[str, Any]:
@@ -877,6 +894,7 @@ def create_semantic_tag(
 
 
 @mcp.tool()
+@audit_log
 def delete_semantic_tag(
     tag_uid: str = Field(..., description="UID of the tag to delete")
 ) -> bool:
@@ -890,6 +908,7 @@ def delete_semantic_tag(
 
 
 @mcp.tool()
+@audit_log
 def add_item_semantic_tag(
     item_name: str = Field(..., description="Name of the item to add the tag to"),
     tag_uid: str = Field(..., description="UID of the tag to add"),
@@ -911,6 +930,7 @@ def add_item_semantic_tag(
 
 
 @mcp.tool()
+@audit_log
 def remove_item_semantic_tag(
     item_name: str = Field(..., description="Name of the item to remove tag for"),
     tag_uid: str = Field(..., description="UID of the tag to remove"),
@@ -955,6 +975,7 @@ def list_inbox_things(
 
 
 @mcp.tool()
+@audit_log
 def approve_inbox_thing(
     thing_uid: str = Field(..., description="UID of the inbox item to approve"),
     thing_id: str = Field(..., description="ID to assign to the new thing"),
@@ -978,6 +999,7 @@ def approve_inbox_thing(
 
 
 @mcp.tool()
+@audit_log
 def ignore_inbox_thing(
     thing_uid: str = Field(..., description="UID of the inbox item to ignore")
 ) -> bool:
@@ -997,6 +1019,7 @@ def ignore_inbox_thing(
 
 
 @mcp.tool()
+@audit_log
 def unignore_inbox_thing(
     thing_uid: str = Field(..., description="UID of the inbox item to unignore")
 ) -> bool:
@@ -1016,6 +1039,7 @@ def unignore_inbox_thing(
 
 
 @mcp.tool()
+@audit_log
 def delete_inbox_thing(
     thing_uid: str = Field(..., description="UID of the inbox item to delete")
 ) -> bool:
@@ -1160,6 +1184,7 @@ def query_inventory(
 
 
 @mcp.tool()
+@audit_log
 def update_items(
     patch: Dict[str, Any] = Field(..., description=(
         "JSON Merge Patch (RFC 7396). Present fields replace, null deletes, absent = unchanged. "
@@ -1259,6 +1284,7 @@ def diagnose_item(
 
 
 @mcp.tool()
+@audit_log
 def rename_item(
     old_name: str = Field(..., description="Current item name"),
     new_name: str = Field(..., description="Target item name (must not already exist)"),
@@ -1456,6 +1482,7 @@ def get_thing_context(
 
 
 @mcp.tool()
+@audit_log
 def replace_thing(
     old_thing_uid: str = Field(
         ...,
@@ -1656,6 +1683,7 @@ def _zip_items_characteristics(item: Union[str, List[str]], characteristic: Unio
 
 
 @mcp.tool()
+@audit_log
 def save_health_suppression(
     analysis: str = Field(
         ...,
@@ -1694,6 +1722,7 @@ def save_health_suppression(
 
 
 @mcp.tool()
+@audit_log
 def delete_health_suppression(
     analysis: str = Field(..., description="Analysis name of the suppression to remove"),
     item: Union[str, List[str]] = Field(
@@ -1715,6 +1744,29 @@ def delete_health_suppression(
         for i, c in pairs
     ]
     return results[0] if len(results) == 1 else results
+
+
+@mcp.tool()
+def list_admin_changes(
+    since: Optional[str] = Field(
+        None, description="Only entries at or after this ISO-8601 timestamp (e.g. '2026-06-17T20:00:00')"
+    ),
+    until: Optional[str] = Field(
+        None, description="Only entries at or before this ISO-8601 timestamp"
+    ),
+    tool: Optional[str] = Field(
+        None, description="Only entries from this tool name, e.g. 'rename_item'"
+    ),
+    limit: int = Field(100, description="Maximum number of entries to return (most recent first)"),
+) -> List[Dict[str, Any]]:
+    """List recorded admin changes (audit trail of mutating tool calls).
+
+    Every create/update/delete/rename-style tool call is logged here with its
+    arguments and outcome — use this to recall what changed and when, e.g.
+    after noticing a new error and wanting to check whether a recent admin
+    action might be the cause.
+    """
+    return _read_admin_changes(since=since, until=until, tool=tool, limit=limit)
 
 
 def run_server():
