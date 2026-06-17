@@ -82,22 +82,32 @@ def diagnose_item(item_name: str, client: OpenHABClient) -> Dict[str, Any]:
         widgets = f_widgets.result()
 
     # Rules referencing this item
+    # ref_types only catches the item name double-quoted in structured trigger/
+    # condition/action fields (e.g. itemName: "x"). Script bodies often reference
+    # items differently — single-quoted strings (getItem('x')), no quotes at all
+    # (items.x.sendCommand(...) via the items proxy), or just a mention in a
+    # comment. _script_excerpts does a plain substring scan that catches all of
+    # these, so a rule counts as referencing the item if *either* check hits —
+    # otherwise script-only references (which are common and exactly the ones
+    # worth a manual look before renaming/deleting) would be silently missed.
     referencing_rules = []
     for rule in all_rules:
         ref_types = _rule_reference_types(rule, item_name)
-        if ref_types:
-            script_actions = [
-                a for a in rule.get("actions", []) if a.get("type") == "script.ScriptAction"
-            ]
-            referencing_rules.append(
-                {
-                    "uid": rule.get("uid"),
-                    "name": rule.get("name"),
-                    "reference_in": ref_types,
-                    "has_script": bool(script_actions),
-                    "script_excerpts": _script_excerpts(rule, item_name) if script_actions else [],
-                }
-            )
+        script_actions = [
+            a for a in rule.get("actions", []) if a.get("type") == "script.ScriptAction"
+        ]
+        excerpts = _script_excerpts(rule, item_name) if script_actions else []
+        if not ref_types and not excerpts:
+            continue
+        referencing_rules.append(
+            {
+                "uid": rule.get("uid"),
+                "name": rule.get("name"),
+                "reference_in": ref_types,
+                "has_script": bool(script_actions),
+                "script_excerpts": excerpts,
+            }
+        )
 
     # UI components referencing this item
     referencing_ui = []
