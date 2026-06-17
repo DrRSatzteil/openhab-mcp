@@ -36,6 +36,12 @@ _MIN_EQUIPMENT_INSTANCES = 2   # need at least this many to derive a pattern
 _CONSISTENCY_THRESHOLD = 0.75  # fraction of group members that must share a pattern for it to be "expected"
 _LOO_MIN_MEMBERS = 5           # minimum group size for leave-one-out analysis
 _LOO_STD_FACTOR = 2.0          # flag members whose LOO score is this many std-devs below group mean
+_MIN_FEATURE_COVERAGE = 0.5    # a feature must appear in at least this fraction of a group's members
+                                # to count towards its profile — features shared by only a minority
+                                # (e.g. a device-type token in a heterogeneous monitoring group like
+                                # "lastmessages") say more about an incidental sub-cluster than about
+                                # what actually defines the group, and including them drags down
+                                # scores for everyone outside that sub-cluster.
 
 
 # ── helpers ──────────────────────────────────────────────────────────────────
@@ -95,14 +101,20 @@ def _features(
 
 
 def _build_profile(member_feature_sets: List[Set[str]]) -> Dict[str, float]:
-    """Feature → relative frequency (TF) across members."""
+    """Feature → relative frequency (TF) across members.
+
+    Features below _MIN_FEATURE_COVERAGE are dropped before they ever reach
+    the profile — a feature present in only a minority of members reflects an
+    incidental sub-cluster (e.g. several window sensors sharing a device-type
+    token in an otherwise heterogeneous group), not a trait of the group itself.
+    """
     n = len(member_feature_sets)
     if not n:
         return {}
     counts: Counter = Counter()
     for fs in member_feature_sets:
         counts.update(fs)
-    return {f: c / n for f, c in counts.items()}
+    return {f: c / n for f, c in counts.items() if c / n >= _MIN_FEATURE_COVERAGE}
 
 
 def _apply_idf(profiles: Dict[str, Dict[str, float]], n_groups: int) -> Dict[str, Dict[str, float]]:
