@@ -258,7 +258,7 @@ def rename_item(
 
     # Step D: update UI components
     for ui_ref in referencing_ui:
-        ns = ui_ref.get("namespace", "ui:pages")
+        ns = ui_ref.get("namespace", "ui:page")
         uid = ui_ref["uid"]
         try:
             components = client.get_ui_components(ns)

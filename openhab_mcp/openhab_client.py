@@ -1954,8 +1954,8 @@ class OpenHABClient:
         if response.status_code not in (200, 204):
             response.raise_for_status()
 
-    def get_ui_components(self, namespace: str = "ui:pages") -> List[Dict[str, Any]]:
-        """Fetch UI components for a given namespace (ui:pages, ui:widgets, ui:tiles)."""
+    def get_ui_components(self, namespace: str = "ui:page") -> List[Dict[str, Any]]:
+        """Fetch UI components for a given namespace (ui:page, ui:widget, ui:blocks)."""
         response = self.session.get(f"{self.base_url}/rest/ui/components/{namespace}")
         if response.status_code == 404:
             return []

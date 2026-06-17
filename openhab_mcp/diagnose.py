@@ -72,8 +72,8 @@ def diagnose_item(item_name: str, client: OpenHABClient) -> Dict[str, Any]:
         f_item = pool.submit(client.get_item, item_name)
         f_links = pool.submit(client.get_item_links_raw, item_name)
         f_rules = pool.submit(client.get_all_rules_raw)
-        f_pages = pool.submit(client.get_ui_components, "ui:pages")
-        f_widgets = pool.submit(client.get_ui_components, "ui:widgets")
+        f_pages = pool.submit(client.get_ui_components, "ui:page")
+        f_widgets = pool.submit(client.get_ui_components, "ui:widget")
 
         item = f_item.result()
         links = f_links.result()
@@ -110,16 +110,19 @@ def diagnose_item(item_name: str, client: OpenHABClient) -> Dict[str, Any]:
         )
 
     # UI components referencing this item
+    # Components don't carry their own "namespace" field in the API response —
+    # tag each by which namespace it was actually fetched from.
     referencing_ui = []
-    for component in pages + widgets:
-        if _search_json(component, item_name):
-            referencing_ui.append(
-                {
-                    "uid": component.get("uid"),
-                    "label": component.get("label"),
-                    "namespace": component.get("namespace", "ui:pages"),
-                }
-            )
+    for namespace, components in (("ui:page", pages), ("ui:widget", widgets)):
+        for component in components:
+            if _search_json(component, item_name):
+                referencing_ui.append(
+                    {
+                        "uid": component.get("uid"),
+                        "label": component.get("label"),
+                        "namespace": namespace,
+                    }
+                )
 
     # Persistence: check if item has persistence metadata or known config
     persistence_namespaces = [
