@@ -461,6 +461,39 @@ def _group_consistency(inventory: AdminInventory) -> Dict[str, Any]:
                     "outliers": outliers,
                 })
 
+        # 4. Name-token *position* consistency
+        # Unlike check 2 (token present anywhere), this catches tokens that are
+        # present but out of order (e.g. "bathroom_window_sash" among
+        # "window_bathroom_*" siblings — check 2 sees both tokens present and
+        # stays quiet; this one sees "bathroom" where "window" belongs).
+        # Positions with no majority token (e.g. position 0 in a device-type-mixed
+        # group like "lastmessages") are simply skipped, same as check 2.
+        tokenized = {i["name"]: _name_tokens(i.get("name", "")) for i in member_items}
+        max_len = max((len(t) for t in tokenized.values()), default=0)
+
+        for pos in range(max_len):
+            pos_tok_counts: Counter = Counter(
+                toks[pos] for toks in tokenized.values() if pos < len(toks)
+            )
+            if not pos_tok_counts:
+                continue
+            top_tok, top_count = pos_tok_counts.most_common(1)[0]
+            if top_count / n < _CONSISTENCY_THRESHOLD:
+                continue
+            outliers = sorted(
+                name for name, toks in tokenized.items()
+                if (pos >= len(toks) or toks[pos] != top_tok)
+                and not suppressions.is_suppressed("group_consistency", name, group_name)
+            )
+            if outliers:
+                anomalies.append({
+                    "check": "name_token_position",
+                    "position": pos,
+                    "expected_token": top_tok,
+                    "present_in": top_count,
+                    "outliers": outliers,
+                })
+
         if not anomalies:
             continue
 
@@ -476,8 +509,9 @@ def _group_consistency(inventory: AdminInventory) -> Dict[str, Any]:
     return {
         "description": (
             f"Within-group consistency check (threshold ≥{int(_CONSISTENCY_THRESHOLD*100)}%). "
-            "For each group, dominant patterns for item type, name tokens, and label tokens are derived. "
-            "Members that deviate from a majority pattern are flagged as potential misplacements or naming inconsistencies."
+            "For each group, dominant patterns for item type, name tokens, name-token position, "
+            "and label tokens are derived. Members that deviate from a majority pattern are flagged "
+            "as potential misplacements or naming inconsistencies."
         ),
         "groups_analysed": len(findings),
         "findings": findings,
