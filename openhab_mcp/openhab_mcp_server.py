@@ -298,6 +298,22 @@ def send_command(
     return openhab_client.send_command(item_name, command)
 
 
+def _collapse_unchanged_datapoints(datapoints: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Drop datapoints whose state repeats the previous one, keeping only real
+    transitions — plus the very first and last datapoint of the range even if
+    their value didn't change, so the boundary state of the window is never lost.
+    """
+    if not datapoints:
+        return datapoints
+    collapsed = [datapoints[0]]
+    for point in datapoints[1:]:
+        if point.get("state") != collapsed[-1].get("state"):
+            collapsed.append(point)
+    if collapsed[-1].get("time") != datapoints[-1].get("time"):
+        collapsed.append(datapoints[-1])
+    return collapsed
+
+
 @mcp.tool()
 def get_item_persistence(
     item_name: str = Field(..., description="Name of the item to get persistence for"),
@@ -311,6 +327,13 @@ def get_item_persistence(
         description="End time in UTC/Zulu time format [yyyy-MM-dd'T'HH:mm:ss.SSS'Z']",
         examples=["2025-06-03T22:21:13.123Z"],
     ),
+    collapse_unchanged: bool = Field(
+        True,
+        description="Drop datapoints that just repeat the previous value (common with minutely-sampled "
+                    "persistence strategies) so only real state transitions remain. The first and last "
+                    "datapoint of the range are always kept regardless, so the boundary state is never lost. "
+                    "Set False to get the raw, unfiltered series.",
+    ),
 ) -> Dict[str, Any]:
     """
     Get the persistence values of an openHAB item between start and end in UTC/Zulu time format
@@ -320,8 +343,14 @@ def get_item_persistence(
         item_name: Name of the item to get persistence for
         start: Start time in UTC/Zulu time format [yyyy-MM-dd'T'HH:mm:ss.SSS'Z']
         end: End time in UTC/Zulu time format [yyyy-MM-dd'T'HH:mm:ss.SSS'Z']
+        collapse_unchanged: Drop repeated-value datapoints, keeping only transitions plus the range boundaries
     """
-    return openhab_client.get_item_persistence(item_name, start, end)
+    result = openhab_client.get_item_persistence(item_name, start, end)
+    if collapse_unchanged and isinstance(result, dict) and "data" in result:
+        result = dict(result)
+        result["data"] = _collapse_unchanged_datapoints(result["data"])
+        result["datapoints"] = str(len(result["data"]))
+    return result
 
 
 # Item Metadata Tools
