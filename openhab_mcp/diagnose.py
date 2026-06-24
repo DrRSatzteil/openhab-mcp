@@ -29,6 +29,25 @@ def _rule_reference_types(rule: dict, item_name: str) -> List[str]:
     return refs
 
 
+def _group_trigger_matches(rule: dict, item_groups: List[str]) -> List[str]:
+    """Return group names that are both a GroupStateChangeTrigger in the rule
+    AND a membership of the diagnosed item.
+
+    These are indirect triggers: the item can fire the rule via group membership
+    even though the rule script never mentions the item by name. Text-based
+    scanning misses these entirely, so they need a dedicated structural check.
+    """
+    if not item_groups:
+        return []
+    matches = []
+    for trigger in rule.get("triggers", []):
+        if trigger.get("type") == "core.GroupStateChangeTrigger":
+            group_name = trigger.get("configuration", {}).get("groupName")
+            if group_name and group_name in item_groups:
+                matches.append(group_name)
+    return matches
+
+
 def _script_excerpts(rule: dict, item_name: str) -> List[Dict[str, Any]]:
     """Extract ±5-line context windows where item_name appears in script action bodies."""
     excerpts = []
@@ -110,9 +129,23 @@ def diagnose_item(item_name: str, client: OpenHABClient) -> Dict[str, Any]:
     # these, so a rule counts as referencing the item if *either* check hits —
     # otherwise script-only references (which are common and exactly the ones
     # worth a manual look before renaming/deleting) would be silently missed.
+    #
+    # Additionally: GroupStateChangeTrigger rules are fired when ANY member of a
+    # group changes — so if this item is in group G and a rule has a
+    # GroupStateChangeTrigger on G, that rule IS triggered by this item even if
+    # the rule script never mentions the item by name. These are detected
+    # structurally via _group_trigger_matches and reported as "group_trigger"
+    # references. The trigger itself does not need patching on rename (the item
+    # keeps its group memberships), but any dynamic name construction in the
+    # script body (e.g. items[event.itemName + '_status']) cannot be
+    # auto-patched and needs manual review.
+    item_groups = item.get("groupNames", [])
     referencing_rules = []
     for rule in all_rules:
         ref_types = _rule_reference_types(rule, item_name)
+        group_via = _group_trigger_matches(rule, item_groups)
+        if group_via:
+            ref_types.append("group_trigger")
         script_actions = [
             a for a in rule.get("actions", []) if a.get("type") == "script.ScriptAction"
         ]
@@ -126,6 +159,7 @@ def diagnose_item(item_name: str, client: OpenHABClient) -> Dict[str, Any]:
                 "reference_in": ref_types,
                 "has_script": bool(script_actions),
                 "script_excerpts": excerpts,
+                "group_triggers": group_via,
             }
         )
 
@@ -153,6 +187,10 @@ def diagnose_item(item_name: str, client: OpenHABClient) -> Dict[str, Any]:
 
     # Impact summary
     script_rules = [r for r in referencing_rules if r["script_excerpts"]]
+    group_trigger_rules = [r for r in referencing_rules if r.get("group_triggers")]
+    # Group-trigger rules fire when this item changes but don't reference it by
+    # name — the trigger itself survives a rename, but any dynamic script logic
+    # (e.g. event.itemName + '_suffix') may need manual follow-up.
     blocking = len(links) + len(referencing_rules) + len(referencing_ui) + len(referencing_sitemaps)
 
     return {
@@ -181,11 +219,16 @@ def diagnose_item(item_name: str, client: OpenHABClient) -> Dict[str, Any]:
             "ui_components": len(referencing_ui),
             "sitemaps": len(referencing_sitemaps),
             "script_rules_need_manual_review": [r["name"] for r in script_rules],
+            "group_trigger_rules": [
+                {"name": r["name"], "via_groups": r["group_triggers"]}
+                for r in group_trigger_rules
+            ],
             "safe_to_delete": blocking == 0,
             "rename_auto_updatable": [
                 r["name"]
                 for r in referencing_rules
                 if r["reference_in"] == ["trigger"] and not r["script_excerpts"]
+                and not r.get("group_triggers")
             ],
         },
     }
