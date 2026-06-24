@@ -29,19 +29,28 @@ def _rule_reference_types(rule: dict, item_name: str) -> List[str]:
     return refs
 
 
-def _group_trigger_matches(rule: dict, item_groups: List[str]) -> List[str]:
-    """Return group names that are both a GroupStateChangeTrigger in the rule
-    AND a membership of the diagnosed item.
+_GROUP_TRIGGER_TYPES = {
+    "core.GroupStateChangeTrigger",
+    "core.GroupStateUpdateTrigger",
+    "core.GroupItemStateChangeTrigger",
+    "core.GroupItemStateUpdateTrigger",
+}
 
-    These are indirect triggers: the item can fire the rule via group membership
-    even though the rule script never mentions the item by name. Text-based
-    scanning misses these entirely, so they need a dedicated structural check.
+
+def _group_trigger_matches(rule: dict, item_groups: List[str]) -> List[str]:
+    """Return group names that are both a group trigger in the rule AND a
+    membership of the diagnosed item.
+
+    All four openHAB group trigger types (State/ItemState × Change/Update) fire
+    when any member item changes, so all are relevant for impact analysis. Text-
+    based scanning misses these entirely when the script uses dynamic name
+    construction — this structural check catches them all.
     """
     if not item_groups:
         return []
     matches = []
     for trigger in rule.get("triggers", []):
-        if trigger.get("type") == "core.GroupStateChangeTrigger":
+        if trigger.get("type") in _GROUP_TRIGGER_TYPES:
             group_name = trigger.get("configuration", {}).get("groupName")
             if group_name and group_name in item_groups:
                 matches.append(group_name)
