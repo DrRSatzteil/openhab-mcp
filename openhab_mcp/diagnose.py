@@ -34,6 +34,7 @@ _GROUP_TRIGGER_TYPES = {
     "core.GroupStateUpdateTrigger",
     "core.GroupItemStateChangeTrigger",
     "core.GroupItemStateUpdateTrigger",
+    "core.GroupCommandTrigger",
 }
 
 
