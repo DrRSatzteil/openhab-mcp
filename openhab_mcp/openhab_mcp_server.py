@@ -154,13 +154,17 @@ def list_items(
     to get an overview of your items. Use the `get_item_details` tool to get
     more information about a specific item.
 
+    Parameter names use the filter_ prefix: filter_name (not name_filter),
+    filter_tag (not tag_filter), filter_type (not type_filter), filter_group (not group_filter).
+    Unknown parameters are silently ignored, so use the exact names listed here.
+
     Args:
         page: Page number of paginated result set. Page index starts with 1. There are more items when `has_next` is true
         page_size: Number of elements shown per page
         sort_order: Sort order
         filter_tag: Optional filter items by tag (either a non-semantic tag or the name of a semantic tag). All available semantic tags can be retrieved from the `list_tags` tool
         filter_type: Optional filter items by type
-        filter_name: Optional filter items by name. All items that contain the filter value in their name are returned
+        filter_name: Optional filter items by name (parameter is filter_name, not name_filter). All items that contain the filter value in their name are returned
         filter_fields: Optional filter items by fields. Item name will always be included by default.
         filter_group: Optional filter items by group name. Returns all members recursively.
     """
@@ -1216,7 +1220,10 @@ def query_inventory(
 @audit_log
 def update_items(
     patch: Dict[str, Any] = Field(..., description=(
-        "JSON Merge Patch (RFC 7396). Present fields replace, null deletes, absent = unchanged. "
+        "JSON Merge Patch (RFC 7396) applied identically to every matched item. "
+        "This is NOT a per-item map — it is a single patch dict applied to all items selected by the filter parameters. "
+        "To target specific items by name use item_names=['x', 'y']. "
+        "Present fields replace, null deletes, absent = unchanged. "
         "Supported: label, category, tags, groupNames, metadata ({ns: {value,config} or null}). "
         "tags_remove: [...] removes specific tags without touching others (use instead of null which clears all). "
         "groups_remove: [...] removes from specific groups without touching others. "
