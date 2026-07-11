@@ -106,13 +106,16 @@ class ThingBase(BaseModel):
             return self
             
         if self.bridgeUID:
-            pattern = r"{0}:{1}:(.+)".format(
-                re.escape(self.thingTypeUID), 
-                re.escape(self.bridgeUID)
+            # Only the bridge's own thing-id segment (its last UID segment) belongs
+            # in the child UID, not the bridge's full UID.
+            bridge_segment = self.bridgeUID.split(":")[-1]
+            pattern = r"^{0}:{1}:(.+)$".format(
+                re.escape(self.thingTypeUID),
+                re.escape(bridge_segment)
             )
         else:
-            pattern = r"{}:(.+)".format(re.escape(self.thingTypeUID))
-            
+            pattern = r"^{}:(.+)$".format(re.escape(self.thingTypeUID))
+
         if not re.search(pattern, self.UID):
             raise ValueError(
                 "Thing UID must be in format 'binding_id:thing_type_id:thing_id' or "
