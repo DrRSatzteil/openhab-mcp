@@ -1,0 +1,64 @@
+name: Bulk cleanup package versions
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Preview only, don't actually delete"
+        type: boolean
+        default: true
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+    steps:
+      - name: Determine active branch tags
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh api "/repos/${{ github.repository }}/branches" --paginate --jq '.[].name' \
+            | tr '[:upper:]' '[:lower:]' | tr '/' '-' > /tmp/active_tags.txt
+          echo "Active branch-derived tags:"
+          cat /tmp/active_tags.txt
+
+      - name: Delete package versions not matching an active branch or 'latest'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OWNER: ${{ github.repository_owner }}
+          PACKAGE: ${{ github.event.repository.name }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          echo "Dry run: ${DRY_RUN}"
+          mapfile -t ACTIVE < /tmp/active_tags.txt
+
+          gh api "/users/${OWNER}/packages/container/${PACKAGE}/versions" --paginate \
+            --jq '.[] | [(.id|tostring), (.metadata.container.tags // [] | join(","))] | @tsv' | \
+          while IFS=$'\t' read -r id tagcsv; do
+            if [ -z "$tagcsv" ]; then
+              # Untagged manifest — likely a child of a multi-arch image index.
+              # Skip: deleting these individually can break the parent image.
+              echo "SKIP   id=$id (untagged)"
+              continue
+            fi
+
+            IFS=',' read -ra tags <<< "$tagcsv"
+
+            keep=false
+            for t in "${tags[@]}"; do
+              if [ "$t" = "latest" ]; then keep=true; fi
+              for a in "${ACTIVE[@]}"; do
+                if [ "$t" = "$a" ]; then keep=true; fi
+              done
+            done
+
+            if [ "$keep" = "true" ]; then
+              echo "KEEP   id=$id tags=[${tags[*]}]"
+            else
+              echo "DELETE id=$id tags=[${tags[*]}]"
+              if [ "$DRY_RUN" != "true" ]; then
+                gh api --method DELETE "/users/${OWNER}/packages/container/${PACKAGE}/versions/${id}"
+              fi
+            fi
+          done
