@@ -1,0 +1,33 @@
+name: Cleanup package on branch delete
+
+on:
+  delete:
+
+jobs:
+  cleanup:
+    if: github.event.ref_type == 'branch'
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+    steps:
+      - name: Delete container image tagged for the deleted branch
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BRANCH: ${{ github.event.ref }}
+          OWNER: ${{ github.repository_owner }}
+          PACKAGE: ${{ github.event.repository.name }}
+        run: |
+          # Mirror docker/metadata-action's type=ref,event=branch normalization:
+          # lowercase, slashes become hyphens.
+          TAG=$(echo "$BRANCH" | tr '[:upper:]' '[:lower:]' | tr '/' '-')
+          echo "Deleted branch: $BRANCH -> looking for image tag: $TAG"
+
+          VERSION_ID=$(gh api "/users/${OWNER}/packages/container/${PACKAGE}/versions" --paginate \
+            --jq ".[] | select(.metadata.container.tags[]? == \"${TAG}\") | .id" | head -1)
+
+          if [ -n "$VERSION_ID" ]; then
+            echo "Deleting package version $VERSION_ID (tag: $TAG)"
+            gh api --method DELETE "/users/${OWNER}/packages/container/${PACKAGE}/versions/${VERSION_ID}"
+          else
+            echo "No package version found for tag '${TAG}' — nothing to delete."
+          fi
