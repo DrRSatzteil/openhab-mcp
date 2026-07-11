@@ -5,7 +5,7 @@ import unittest
 import requests
 from unittest.mock import MagicMock
 from openhab_mcp.openhab_client import OpenHABClient
-from openhab_mcp.models import ItemCreate, ItemMetadata, Tag, ItemUpdate
+from openhab_mcp.models import ItemBase, ItemCreate, ItemMetadata, Tag
 
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────
@@ -331,7 +331,7 @@ class TestOpenHABItems(ItemsTestBase):
         self._register(FULL_ITEM)
         self.session.put.return_value = resp(None, 200)
 
-        self.client.update_item(ItemUpdate(
+        self.client.update_item(ItemBase(
             name="TestItem_FullItem", type="Dimmer",
             category="Light",
             semanticTags=["Equipment_Lighting"],
@@ -362,7 +362,7 @@ class TestOpenHABItems(ItemsTestBase):
 
         # update_item: PUT then get_item
         self.session.put.return_value = resp(None, 200)
-        updated = self.client.update_item(ItemUpdate(
+        updated = self.client.update_item(ItemBase(
             name="TestItem_Dimmer1", type="Dimmer",
             label=None, category=None, nonSemanticTags=[], semanticTags=[]
         ))

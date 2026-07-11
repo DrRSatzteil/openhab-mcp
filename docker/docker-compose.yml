@@ -9,13 +9,21 @@ services:
     restart: unless-stopped
     ports:
       - "8081:8000"
-    # Environment variables are loaded from .env file in the docker directory
     env_file:
       - .env
     environment:
       - PYTHONUNBUFFERED=1
+      - HEALTH_SUPPRESSIONS_PATH=/app/data/health_suppressions.json
+      - ADMIN_CHANGELOG_PATH=/app/data/admin_changelog.jsonl
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request, json; req = urllib.request.Request('http://localhost:8000/mcp', data=json.dumps({'jsonrpc':'2.0','method':'ping','id':1}).encode(), headers={'Content-Type': 'application/json', 'Accept': 'application/json, text/event-stream'}); urllib.request.urlopen(req, timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
     volumes:
-      - ../openhab_mcp/process_templates/override:/app/openhab_mcp/process_templates/override
+      - ./data:/app/data                              # health suppressions and other persistent data
+      - /opt/openhab/userdata/logs:/app/logs:ro       # openHAB log directory for manage_logs
     networks:
       - openhab-network
 

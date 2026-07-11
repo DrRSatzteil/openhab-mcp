@@ -90,10 +90,6 @@ class ItemCreate(ItemBase):
     metadata: Optional[Dict[str, ItemMetadata]] = Field(default_factory=dict, description="Metadata of the item")
     group_names: List[str] = Field(default_factory=list, description="List of group names for the item", alias="groupNames")
 
-class ItemUpdate(ItemBase):
-    name: str = Field(..., description="Name of the item")
-    type: str = Field(..., description="Type of the item")
-
 class ThingBase(BaseModel):
     UID: Optional[str] = Field(None, description="UID of the thing")
     thingTypeUID: Optional[str] = Field(None, description="Type of the thing")
@@ -110,13 +106,16 @@ class ThingBase(BaseModel):
             return self
             
         if self.bridgeUID:
-            pattern = r"{0}:{1}:(.+)".format(
-                re.escape(self.thingTypeUID), 
-                re.escape(self.bridgeUID)
+            # Only the bridge's own thing-id segment (its last UID segment) belongs
+            # in the child UID, not the bridge's full UID.
+            bridge_segment = self.bridgeUID.split(":")[-1]
+            pattern = r"^{0}:{1}:(.+)$".format(
+                re.escape(self.thingTypeUID),
+                re.escape(bridge_segment)
             )
         else:
-            pattern = r"{}:(.+)".format(re.escape(self.thingTypeUID))
-            
+            pattern = r"^{}:(.+)$".format(re.escape(self.thingTypeUID))
+
         if not re.search(pattern, self.UID):
             raise ValueError(
                 "Thing UID must be in format 'binding_id:thing_type_id:thing_id' or "
