@@ -292,7 +292,7 @@ The MCP server provides a comprehensive set of tools for managing your openHAB s
 
 ## Teleport Integration
 
-The OpenHAB MCP server can be securely exposed via [Teleport](https://goteleport.com/) without requiring a VPN or direct network access from your AI assistant client.
+The OpenHAB MCP server can be securely exposed via [Teleport](https://goteleport.com/) without requiring a VPN or direct network access from your AI assistant client. Teleport supports registering it as a **native MCP application** (via the `mcp+http://` URI scheme), which gives you a full audit trail of individual MCP tool calls — not just raw HTTP requests.
 
 ### Architecture
 
@@ -304,7 +304,7 @@ Claude Code / AI Client
   → openhab-mcp container (HTTP mode)
 ```
 
-> **Important:** Teleport's `application-tunnel` only works with HTTP apps. The container must run in `streamable-http` mode, not `stdio`.
+> **Important:** Teleport's `application-tunnel` only works with HTTP apps. The container must run in `streamable-http` mode, not `stdio`. This is not a limitation — registering the app with the `mcp+http://` scheme (see below) makes it a real Teleport MCP app with full tool-call auditing, so there is no reason to reach for stdio.
 
 ### 1. Container Configuration
 
@@ -327,7 +327,7 @@ The MCP endpoint will be available at `http://localhost:8082/mcp`.
 
 ### 2. Teleport App Service Configuration
 
-Register the container as a Teleport HTTP application — **not** as a stdio MCP app:
+Register the container as a native Teleport **MCP application** using the `mcp+http://` URI scheme — not as a generic HTTP app and not as a stdio MCP app. This makes Teleport parse the underlying MCP traffic and log individual tool calls in the audit log, instead of just opaque HTTP requests:
 
 ```yaml
 app_service:
@@ -336,7 +336,7 @@ app_service:
     - name: openhab-mcp
       labels:
         role: mcp
-      uri: "http://localhost:8082"
+      uri: "mcp+http://localhost:8082"
 ```
 
 ### 3. tbot Application Tunnel (Client Side)
@@ -370,7 +370,7 @@ In `~/.claude.json`, configure the MCP server as an HTTP endpoint:
 
 ### Why Not stdio Mode?
 
-Teleport's `tbot application-tunnel` requires an HTTP app. The alternative `tsh mcp connect` uses stdio transport but requires certificate reissuance, which bot credentials disallow (`disallow-reissue=true`). Running the container in `streamable-http` mode with a Teleport HTTP app avoids both limitations.
+Teleport's `tbot application-tunnel` requires an HTTP app, and the alternative `tsh mcp connect` uses stdio transport but requires certificate reissuance, which bot credentials disallow (`disallow-reissue=true`). Running the container in `streamable-http` mode and registering it as a native `mcp+http://` app avoids both limitations — and comes with the added benefit of a full MCP tool-call audit trail, which a plain stdio setup wouldn't give you either.
 
 ## Development
 
