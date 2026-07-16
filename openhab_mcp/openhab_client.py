@@ -60,6 +60,7 @@ class OpenHABClient:
         filter_tag: Optional[str] = None,
         filter_type: Optional[str] = None,
         filter_name: Optional[str] = None,
+        filter_label: Optional[str] = None,
         filter_fields: List[str] = [],
         filter_group: Optional[str] = None,
     ) -> Dict[str, Any]:
@@ -73,6 +74,7 @@ class OpenHABClient:
             filter_tag: Optional filter items by tag name or tag UID
             filter_type: Optional filter items by type
             filter_name: Optional filter items by name
+            filter_label: Optional filter items by label
             filter_fields: Optional filter items by fields
             filter_group: Optional filter items by group name (returns all members recursively)
 
@@ -102,6 +104,10 @@ class OpenHABClient:
             # Add fields needed for tag processing
             if ("semanticTags" in output_fields or "nonSemanticTags" in output_fields):
                 api_fields.update(["tags"])
+
+            # Add field needed for label filtering, even if label isn't a requested output field
+            if filter_label:
+                api_fields.add("label")
 
             # Add other requested fields
             if output_fields:
@@ -133,7 +139,11 @@ class OpenHABClient:
             # Skip items that don't match the name filter (if provided)
             if filter_name and filter_name.lower() not in item.get("name", "").lower():
                 continue
-                
+
+            # Skip items that don't match the label filter (if provided)
+            if filter_label and filter_label.lower() not in (item.get("label") or "").lower():
+                continue
+
             # Process the item and its members
             processed_item = self._process_member(item, output_fields, tags)
             processed_items.append(processed_item)

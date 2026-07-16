@@ -389,6 +389,33 @@ class TestOpenHABItems(ItemsTestBase):
         self.assertTrue(any('/members' in u for u in called_urls))
         self.assertTrue(any('Indoor_Room_Bedroom' in u for u in called_urls))
 
+    def test_list_items_filter_label(self):
+        self._register(SWITCH_ITEM, DIMMER_ITEM, GROUP_ITEM)
+
+        items = self.client.list_items(filter_label="Switch1")["items"]
+        self.assertEqual(len(items), 1)
+        self.assertEqual(items[0]["name"], "TestItem_Switch1")
+
+        # Case-insensitive substring match
+        items = self.client.list_items(filter_label="dimmer1")["items"]
+        self.assertEqual(len(items), 1)
+        self.assertEqual(items[0]["name"], "TestItem_Dimmer1")
+
+        # No match
+        items = self.client.list_items(filter_label="Nonexistent")["items"]
+        self.assertEqual(len(items), 0)
+
+    def test_list_items_filter_label_with_restricted_fields(self):
+        """filter_label must still work when 'label' isn't among the requested output fields,
+        and the label should not leak into the output in that case."""
+        self._register(SWITCH_ITEM, DIMMER_ITEM)
+
+        items = self.client.list_items(filter_label="Switch1", filter_fields=["type"])["items"]
+        self.assertEqual(len(items), 1)
+        self.assertEqual(items[0]["name"], "TestItem_Switch1")
+        self.assertEqual(items[0]["type"], "Switch")
+        self.assertNotIn("label", items[0])
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -138,6 +138,11 @@ def list_items(
         description="Optional filter items by name. All items that contain the filter value in their name are returned",
         examples=["Kitchen", "LivingRoom", "Bedroom"],
     ),
+    filter_label: str = Field(
+        "",
+        description="Optional filter items by label (case-insensitive substring match). Unlike filter_name, this matches the human-readable label, not the technical item name",
+        examples=["Lux", "Umgebungshelligkeit", "Küche"],
+    ),
     filter_fields: List[str] = Field(
         [],
         description="Optional filter items by fields. Item name will always be included by default.",
@@ -155,7 +160,8 @@ def list_items(
     more information about a specific item.
 
     Parameter names use the filter_ prefix: filter_name (not name_filter),
-    filter_tag (not tag_filter), filter_type (not type_filter), filter_group (not group_filter).
+    filter_tag (not tag_filter), filter_type (not type_filter), filter_group (not group_filter),
+    filter_label (not label_filter).
     Unknown parameters are silently ignored, so use the exact names listed here.
 
     Args:
@@ -165,6 +171,7 @@ def list_items(
         filter_tag: Optional filter items by tag (either a non-semantic tag or the name of a semantic tag). All available semantic tags can be retrieved from the `list_tags` tool
         filter_type: Optional filter items by type
         filter_name: Optional filter items by name (parameter is filter_name, not name_filter). All items that contain the filter value in their name are returned
+        filter_label: Optional filter items by label (case-insensitive substring match on the human-readable label, not the technical name)
         filter_fields: Optional filter items by fields. Item name will always be included by default.
         filter_group: Optional filter items by group name. Returns all members recursively.
     """
@@ -175,6 +182,7 @@ def list_items(
         filter_tag=filter_tag,
         filter_type=filter_type,
         filter_name=filter_name,
+        filter_label=filter_label,
         filter_fields=filter_fields,
         filter_group=filter_group or None,
     )
