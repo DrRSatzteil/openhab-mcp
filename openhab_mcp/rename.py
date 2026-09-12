@@ -85,6 +85,36 @@ def _build_item_payload(raw: Dict[str, Any], new_name: str) -> Dict[str, Any]:
     return payload
 
 
+def _direct_members(raw: Dict[str, Any], old_name: str) -> List[Dict[str, Any]]:
+    """Direct members of a renamed Group item — those whose own groupNames lists it.
+
+    Filters on each candidate's groupNames rather than trusting nesting depth,
+    since GET /rest/items/{name} may nest grandchildren under sub-group members too.
+    """
+    return [
+        m for m in raw.get("members", [])
+        if old_name in m.get("groupNames", [])
+    ]
+
+
+def _build_member_regroup_payload(member: Dict[str, Any], old_name: str, new_name: str) -> Dict[str, Any]:
+    """Build a PUT-ready payload for a member item with old_name swapped for new_name
+    in its groupNames, leaving every other field and group membership untouched."""
+    updated_groups = [new_name if g == old_name else g for g in member.get("groupNames", [])]
+    payload: Dict[str, Any] = {
+        "type": member["type"],
+        "name": member["name"],
+        "label": member.get("label", ""),
+        "category": member.get("category", ""),
+        "tags": member.get("tags", []),
+        "groupNames": updated_groups,
+    }
+    for opt in ("groupType", "function", "unitSymbol"):
+        if member.get(opt):
+            payload[opt] = member[opt]
+    return payload
+
+
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
@@ -183,6 +213,8 @@ def rename_item(
                 }
             )
 
+    direct_members = _direct_members(old_raw, old_name)
+
     plan = {
         "old_name": old_name,
         "new_name": new_name,
@@ -199,6 +231,7 @@ def rename_item(
         "update_rules": rule_steps,
         "update_ui": [{"uid": c["uid"], "namespace": c["namespace"]} for c in referencing_ui],
         "sitemaps_need_manual_update": [sm.get("name") for sm in referencing_sitemaps],
+        "regroup_members": [m["name"] for m in direct_members],
         "delete_old_item": old_name,
     }
 
@@ -238,6 +271,20 @@ def rename_item(
             "errors": errors,
             "manual_review_required": manual_review,
         }
+
+    # Step A2: repoint direct members' groupNames to the new group name.
+    # A rename that only creates the new group and deletes the old one leaves
+    # every direct member's groupNames still listing the now-deleted old_name —
+    # they silently fall out of the group instead of following it.
+    for member in direct_members:
+        try:
+            member_payload = _build_member_regroup_payload(member, old_name, new_name)
+            client.session.put(
+                f"{client.base_url}/rest/items/{member['name']}", json=member_payload
+            ).raise_for_status()
+            completed.append(f"regrouped '{member['name']}' → '{new_name}'")
+        except Exception as exc:
+            errors.append(f"regroup_member '{member['name']}' failed: {exc}")
 
     # Step B: copy channel links
     for link in channel_links:

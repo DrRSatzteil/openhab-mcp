@@ -1353,6 +1353,9 @@ def rename_item(
       - UI pages and widgets (JSON search-replace)
       - Channel links (copied to new item, old links removed with old item)
       - Item metadata (all namespaces except semantics, which comes from tags/groups)
+      - Direct group members' groupNames (when renaming a Group item, its
+        children are repointed to the new group name instead of falling out
+        of the group)
 
     What needs manual follow-up (flagged in manual_review_required):
       - Script bodies in rules listed in skip_script_rule_uids
