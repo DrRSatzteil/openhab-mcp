@@ -188,8 +188,12 @@ def update_items(
     # Build plan
     plan = []
     for name in sorted(names):
-        current = inventory.get_item(name)
-        if not current:
+        # Fetch live — the cached inventory can be stale if a prior write (this
+        # tool or elsewhere) changed the item since the last refresh_inventory(),
+        # and merging tags/groupNames against stale data silently drops fields.
+        try:
+            current = client.get_item_raw(name)
+        except ValueError:
             continue
 
         item_payload, item_changed = _apply_item_patch(current, patch, merge=merge)
@@ -206,6 +210,7 @@ def update_items(
         if item_changed or meta_plan:
             plan.append({
                 "name": name,
+                "type": current["type"],
                 "item_fields_changed": item_changed,
                 "new_payload": {k: v for k, v in item_payload.items()
                                 if k not in ("type", "name")} if item_changed else {},
@@ -233,7 +238,7 @@ def update_items(
             try:
                 client.session.put(
                     f"{client.base_url}/rest/items/{encoded}",
-                    json=entry["new_payload"] | {"type": inventory.get_item(name)["type"], "name": name},
+                    json=entry["new_payload"] | {"type": entry["type"], "name": name},
                 ).raise_for_status()
                 completed.append(f"{name}: item fields updated")
             except Exception as exc:
