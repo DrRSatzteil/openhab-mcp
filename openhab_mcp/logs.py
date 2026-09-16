@@ -5,12 +5,22 @@ accessible inside the container (e.g. via a volume mount).
 
 Log line format:
   2024-01-15 10:23:45.123 [INFO ] [org.openhab.binding.zwave] - Message
+
+openHAB writes these timestamps in its own host's local civil time (whatever
+timezone the openHAB JVM runs in), with no offset marker on the line. This
+module's "now" reference for relative windows ('1h', '30m') must be computed
+in that SAME timezone, not this container's own — otherwise, if the two
+differ (e.g. this container defaults to UTC while openHAB runs in
+Europe/Berlin), every relative/absolute window silently shifts by the zone
+offset with no error. Set OPENHAB_LOG_TZ to the IANA name of openHAB's
+timezone (e.g. "Europe/Berlin") to fix this; it defaults to UTC.
 """
 
 import os
 import re
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
+from zoneinfo import ZoneInfo
 
 LOG_LINE_RE = re.compile(
     r"^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d+)\s+\[(\w+)\s*\]"
@@ -19,13 +29,29 @@ LOG_LINE_RE = re.compile(
 _RELATIVE_RE = re.compile(r"^(\d+)(h|m|d)$")
 
 
+def _log_tz() -> ZoneInfo:
+    return ZoneInfo(os.environ.get("OPENHAB_LOG_TZ", "UTC"))
+
+
+def _now_in_log_tz() -> datetime:
+    """Current time as a naive datetime in openHAB's log timezone, so it
+    compares correctly against the naive (unmarked) timestamps in the log
+    lines themselves."""
+    return datetime.now(_log_tz()).replace(tzinfo=None)
+
+
 def _parse_time(value: str) -> datetime:
-    """Parse ISO datetime or relative string ('1h', '30m', '2d') to datetime."""
+    """Parse ISO datetime or relative string ('1h', '30m', '2d') to datetime.
+
+    Both branches return a naive datetime in openHAB's log timezone
+    (OPENHAB_LOG_TZ). An absolute ISO value is assumed to already be given
+    in that timezone — pass it without a UTC 'Z'/offset suffix.
+    """
     m = _RELATIVE_RE.match(value.strip())
     if m:
         n, unit = int(m.group(1)), m.group(2)
         delta = {"h": timedelta(hours=n), "m": timedelta(minutes=n), "d": timedelta(days=n)}[unit]
-        return datetime.now() - delta
+        return _now_in_log_tz() - delta
     return datetime.fromisoformat(value.strip())
 
 

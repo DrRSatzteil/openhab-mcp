@@ -1254,15 +1254,25 @@ class OpenHABClient:
         self, rule_uid: str, action_id: str, script_type: str, script_content: str
     ) -> Dict[str, Any]:
         """
-        Update a script action in a rule
-        
+        Update a script action in a rule, leaving all other actions untouched.
+
         Args:
             rule_uid: UID of the rule to update
             action_id: ID of the action to update
             script_type: Type of the script
             script_content: Content of the script
         """
-        # Prepare the action update
+        # update_rule()'s actions-merge treats a passed actions list as the
+        # complete desired set BY ID and implicitly deletes any existing
+        # action whose id is missing from it. Passing only the target action
+        # here would silently drop every other action in the rule, so we
+        # must include every existing action id — untouched ones as a no-op
+        # {"id": ...} entry that update_rule() merges into the existing dict.
+        current_rule = self.get_rule(rule_uid)
+        other_ids = [a["id"] for a in current_rule.get("actions", []) if a.get("id") != action_id]
+        if action_id not in {a.get("id") for a in current_rule.get("actions", [])}:
+            raise ValueError(f"Action '{action_id}' not found in rule '{rule_uid}'")
+
         action_update = {
             "id": action_id,
             "type": "script.ScriptAction",
@@ -1271,9 +1281,9 @@ class OpenHABClient:
                 "script": script_content,
             },
         }
+        actions = [action_update] + [{"id": oid} for oid in other_ids]
 
-        # Update the rule with just this action
-        return self.update_rule(RuleUpdate(uid=rule_uid, actions=[action_update]))
+        return self.update_rule(RuleUpdate(uid=rule_uid, actions=actions))
 
     def delete_rule(self, rule_uid: str) -> bool:
         """
