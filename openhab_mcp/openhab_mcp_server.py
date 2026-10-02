@@ -825,6 +825,7 @@ def get_script(
 @audit_log
 def create_script(
     script_id: str = Field(..., description="ID of the script to create"),
+    script_name: str = Field(..., description="Name of the script"),
     script_type: str = Field(..., description="Type of the script"),
     content: str = Field(..., description="Content of the script"),
 ) -> Dict[str, Any]:
@@ -833,16 +834,18 @@ def create_script(
 
     Args:
         script_id: ID of the script to create
+        script_name: Name of the script
         script_type: Type of the script
         content: Content of the script
     """
-    return openhab_client.create_script(script_id, script_type, content)
+    return openhab_client.create_script(script_id, script_name, script_type, content)
 
 
 @mcp.tool()
 @audit_log
 def update_script(
     script_id: str = Field(..., description="ID of the script to update"),
+    script_name: str = Field(..., description="Name of the script"),
     script_type: str = Field(..., description="Type of the script"),
     content: str = Field(..., description="Content of the script"),
 ) -> Dict[str, Any]:
@@ -851,10 +854,11 @@ def update_script(
 
     Args:
         script_id: ID of the script to update
+        script_name: Name of the script
         script_type: Type of the script
         content: Content of the script
     """
-    return openhab_client.update_script(script_id, script_type, content)
+    return openhab_client.update_script(script_id, script_name, script_type, content)
 
 
 @mcp.tool()
