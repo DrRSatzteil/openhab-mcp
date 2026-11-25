@@ -118,6 +118,22 @@ The server can be configured using environment variables or a `.env` file in the
 - `LOG_LEVEL`: Logging level (default: `INFO`)
 - `OPENHAB_MCP_TRANSPORT`: Transport mode (`stdio`, `streamable-http`, or `sse`) (default: `stdio`)
 
+### Secret Masking
+Thing configurations often contain credentials (controller passwords, API tokens, cloud keys).
+Everything a tool returns ends up in the model's context, so these values are masked as
+`***REDACTED***` in `get_thing`, `list_things` and `get_thing_context` by default. A parameter
+counts as secret if its thing type declares it with `context: password`, or if its name looks
+like one (`password`, `token`, `apiKey`, `secret`, `pin`, ...). Values that only reference a
+variable (`${...}`) stay visible. Sending the placeholder back through `update_thing` keeps the
+stored value, so a read-modify-write never overwrites a credential.
+
+- `OPENHAB_MCP_REDACT_SECRETS`: `true` (default) or `false` to switch masking off
+- `OPENHAB_MCP_SECRET_PARAMS`: comma-separated extra parameter names to always mask
+- `OPENHAB_MCP_NON_SECRET_PARAMS`: comma-separated parameter names never to mask (false positives)
+
+Masking only covers thing configurations. Secrets inside rule scripts, item states or
+transformations are returned as stored.
+
 ## Integration with AI Assistants
 
 The OpenHAB MCP Server can be used with various AI assistants that support the MCP protocol, including Claude and Cline.

@@ -77,6 +77,7 @@ logger.info(f"  OPENHAB_MCP_TRANSPORT: {OPENHAB_MCP_TRANSPORT}")
 logger.info("  OPENHAB_API_TOKEN: Set" if os.environ.get("OPENHAB_API_TOKEN") else "  OPENHAB_API_TOKEN: Not set")
 logger.info("  OPENHAB_USERNAME: Set" if os.environ.get("OPENHAB_USERNAME") else "  OPENHAB_USERNAME: Not set")
 logger.info("  OPENHAB_PASSWORD: Set" if os.environ.get("OPENHAB_PASSWORD") else "  OPENHAB_PASSWORD: Not set")
+logger.info("  OPENHAB_MCP_REDACT_SECRETS: " + os.environ.get("OPENHAB_MCP_REDACT_SECRETS", "true (default)"))
 
 OPENHAB_LOG_PATH = os.environ.get("OPENHAB_LOG_PATH")
 
@@ -228,14 +229,20 @@ def create_item(
 @audit_log
 def delete_item(
     item_name: str = Field(..., description="Name of the item to delete"),
-) -> bool:
+    delete_links: bool = Field(
+        True,
+        description="Also delete the item's channel links (default). openHAB leaves them behind as orphans otherwise.",
+    ),
+) -> Dict[str, Any]:
     """
-    Delete an openHAB item
+    Delete an openHAB item. Its channel links are deleted as well unless
+    delete_links is False.
 
     Args:
         item_name: Name of the item to delete
+        delete_links: Also delete the item's channel links (default: True)
     """
-    return openhab_client.delete_item(item_name)
+    return openhab_client.delete_item(item_name, delete_links=delete_links)
 
 
 @mcp.tool()
@@ -549,10 +556,31 @@ def get_thing(
     """
     Get the details of a specific openHAB thing by UID.
 
+    Secret configuration values (passwords, tokens, API keys) are returned as
+    "***REDACTED***" unless masking is disabled on the server. Sending the
+    placeholder back via update_thing keeps the stored value.
+
     Args:
         thing_uid: UID of the thing to get details for
     """
     return openhab_client.get_thing(thing_uid)
+
+
+@mcp.tool()
+@audit_log
+def set_thing_enabled(
+    thing_uid: str = Field(..., description="UID of the thing to enable or disable"),
+    enabled: bool = Field(..., description="True to enable, False to disable the thing"),
+) -> Dict[str, Any]:
+    """
+    Enable or disable an openHAB thing, like the switch in the UI. Disabling and
+    enabling again restarts the thing handler (e.g. to recover a hanging connection).
+
+    Args:
+        thing_uid: UID of the thing
+        enabled: True to enable, False to disable
+    """
+    return openhab_client.set_thing_enabled(thing_uid, enabled)
 
 
 @mcp.tool()

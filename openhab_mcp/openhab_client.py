@@ -25,6 +25,9 @@ from openhab_mcp.models import (
 DATE_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$")
 
 
+from openhab_mcp.secrets import SecretMasker
+
+
 class OpenHABClient:
     """Client for interacting with the openHAB REST API"""
 
@@ -44,6 +47,9 @@ class OpenHABClient:
             self.session.headers.update({"X-OPENHAB-TOKEN": api_token})
         elif username and password:
             self.session.auth = (username, password)
+
+        # Masks passwords/tokens/API keys in thing configurations (see secrets.py)
+        self._secret_masker = SecretMasker(self._get_thing_type)
 
     def generate_uid(self) -> str:
         return "".join(
@@ -323,15 +329,19 @@ class OpenHABClient:
 
         return self.get_item(item.name)
     
-    def delete_item(self, item_name: str) -> bool:
+    def delete_item(self, item_name: str, delete_links: bool = True) -> Dict[str, Any]:
         """
         Delete an item
 
+        openHAB keeps the item's channel links when an item is deleted through the
+        REST API; they stay behind as orphans. By default they are removed as well.
+
         Args:
             item_name: Name of the item to delete
+            delete_links: Also delete all channel links of the item (default: True)
 
         Returns:
-            True if the item was deleted, raises an error otherwise
+            Dict with 'deleted' (True) and 'links_removed' (list of channel UIDs)
 
         Raises:
             ValueError: If the item with the given name does not exist or is not editable
@@ -339,12 +349,29 @@ class OpenHABClient:
         if not item_name:
             raise ValueError("Item name must be provided")
 
+        links_removed: List[str] = []
+        if delete_links:
+            link_resp = self.session.get(f"{self.base_url}/rest/links", params={"itemName": item_name})
+            if link_resp.status_code == 200:
+                links = [l for l in (link_resp.json() or []) if l.get("itemName") == item_name]
+            else:
+                links = []
+
         response = self.session.delete(f"{self.base_url}/rest/items/{item_name}")
         if response.status_code == 404:
             raise ValueError(f"Item with name '{item_name}' not found")
-        
+
         response.raise_for_status()
-        return True
+
+        if delete_links:
+            for link in links:
+                channel_uid = link.get("channelUID", "")
+                link_del = self.session.delete(
+                    f"{self.base_url}/rest/links/{item_name}/{channel_uid.replace('#', '%23')}"
+                )
+                if link_del.status_code < 400:
+                    links_removed.append(channel_uid)
+        return {"deleted": True, "links_removed": links_removed}
 
     # Item State Management
     def get_item_state(self, item_name: str) -> str:
@@ -897,6 +924,7 @@ class OpenHABClient:
         # The responses are too long to be handled by most LLMs so we remove the channels
         for thing in things:
             thing.pop('channels', None)
+            self._secret_masker.mask_thing(thing)
 
         # Apply filters
         if filter_status:
@@ -934,12 +962,13 @@ class OpenHABClient:
             },
         }
 
-    def get_thing(self, thing_uid: str) -> Dict[str, Any]:
+    def get_thing(self, thing_uid: str, unmasked: bool = False) -> Dict[str, Any]:
         """
         Get a specific thing by UID
 
         Args:
             thing_uid: UID of the thing to retrieve
+            unmasked: Internal use only — return secret configuration values as stored
 
         Returns:
             Dict[str, Any]: The thing details
@@ -962,7 +991,51 @@ class OpenHABClient:
         thing = response.json()
         # The responses are too long to be handled by most LLMs so we remove the channels
         thing.pop('channels', None)
+        if not unmasked:
+            self._secret_masker.mask_thing(thing)
         return thing
+
+    def _get_thing_type(self, thing_type_uid: str) -> Optional[Dict[str, Any]]:
+        """Thing type incl. config descriptions (used to find password parameters)."""
+        response = self.session.get(
+            f"{self.base_url}/rest/thing-types/{quote(thing_type_uid, safe='')}"
+        )
+        if response.status_code != 200:
+            return None
+        return response.json()
+
+    def set_thing_enabled(self, thing_uid: str, enabled: bool = True) -> Dict[str, Any]:
+        """
+        Enable or disable a thing (same as the enable/disable switch in the UI)
+
+        Disabling and re-enabling restarts the thing handler, e.g. to recover a
+        hanging connection.
+
+        Args:
+            thing_uid: UID of the thing
+            enabled: True to enable, False to disable
+
+        Returns:
+            Dict with UID, the requested state and the resulting status info
+        """
+        if not thing_uid:
+            raise ValueError("Thing UID must be provided")
+
+        response = self.session.put(
+            f"{self.base_url}/rest/things/{quote(thing_uid, safe='')}/enable",
+            data="true" if enabled else "false",
+            headers={"Content-Type": "text/plain"},
+        )
+        if response.status_code == 404:
+            raise ValueError(f"Thing with UID '{thing_uid}' not found")
+        response.raise_for_status()
+
+        status = {}
+        try:
+            status = response.json().get("statusInfo", {})
+        except ValueError:
+            pass
+        return {"UID": thing_uid, "enabled": enabled, "statusInfo": status}
 
     def create_thing(self, thing: ThingCreate) -> Dict[str, Any]:
         """
@@ -1003,8 +1076,13 @@ class OpenHABClient:
         
         # Remove UID from payload as it's in the URL
         payload.pop('UID', None)
-        
-        print(f"{self.base_url}/rest/things/{quote(thing.UID, safe='')}", payload)
+
+        # Masked secrets coming back from get_thing must not overwrite the stored value
+        if isinstance(payload.get('configuration'), dict):
+            stored = self.get_thing(thing.UID, unmasked=True).get('configuration', {}) or {}
+            payload['configuration'] = self._secret_masker.restore_placeholders(
+                payload['configuration'], stored
+            )
 
         # Send the update
         response = self.session.put(
