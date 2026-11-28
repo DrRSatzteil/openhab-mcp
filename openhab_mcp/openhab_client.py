@@ -27,6 +27,10 @@ DATE_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$")
 
 from openhab_mcp.secrets import SecretMasker
 
+# Plain-text bodies (commands, states, labels) must be sent as UTF-8 bytes: a str body
+# is encoded as ISO-8859-1 by http.client, which garbles umlauts/"°" and fails on "€".
+TEXT_PLAIN_UTF8 = "text/plain; charset=utf-8"
+
 
 class OpenHABClient:
     """Client for interacting with the openHAB REST API"""
@@ -392,7 +396,9 @@ class OpenHABClient:
             raise ValueError(f"Item with name '{item_name}' not found")
         
         response.raise_for_status()
-        return response.text
+        # openHAB sends text/plain without charset; requests would then assume
+        # ISO-8859-1 and turn "°C" into "Â°C". The body is UTF-8.
+        return response.content.decode("utf-8", errors="replace")
 
     def update_item_state(self, item_name: str, state: str) -> Dict[str, Any]:
         """
@@ -417,8 +423,8 @@ class OpenHABClient:
         # Update state
         response = self.session.put(
             f"{self.base_url}/rest/items/{item_name}/state",
-            data=state,
-            headers={"Content-Type": "text/plain"},
+            data=state.encode("utf-8"),
+            headers={"Content-Type": TEXT_PLAIN_UTF8},
         )
         if response.status_code == 404:
             raise ValueError(f"Item with name '{item_name}' not found")
@@ -449,8 +455,8 @@ class OpenHABClient:
         # Send command
         response = self.session.post(
             f"{self.base_url}/rest/items/{item_name}",
-            data=command,
-            headers={"Content-Type": "text/plain"},
+            data=command.encode("utf-8"),
+            headers={"Content-Type": TEXT_PLAIN_UTF8},
         )
         if response.status_code == 404:
             raise ValueError(f"Item with name '{item_name}' not found")
@@ -1885,8 +1891,8 @@ class OpenHABClient:
         """
         response = self.session.post(
             f"{self.base_url}/rest/inbox/{thing_uid}/approve?newThingId={thing_id}",
-            data=label,
-            headers={"Content-Type": "text/plain"}
+            data=label.encode("utf-8"),
+            headers={"Content-Type": TEXT_PLAIN_UTF8}
         )
         if response.status_code == 400:
             raise ValueError(f"Thing ID {thing_id} is invalid")
